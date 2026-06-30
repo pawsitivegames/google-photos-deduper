@@ -9,8 +9,8 @@ import type {
   PhotoProvider
 } from "../lib/types"
 
-// Service worker for Google Photos Deduper.
-// Routes messages between the app tab and the Google Photos tab.
+// Service worker for PhotoSweep.
+// Routes messages between the app tab and the active photo-provider tab.
 
 // Bidirectional tab mapping: appTabId <-> gpTabId
 const tabMap: Record<number, number> = {}
@@ -224,9 +224,11 @@ async function ensureGoogleMainWorldScripts(tabId: number): Promise<boolean> {
     func: () => ({
       hasGptk: typeof window.gptkApi !== "undefined",
       hasCommandHandler: Boolean(
-        (window as typeof window & {
-          __GPD_GOOGLE_COMMAND_HANDLER_LOADED__?: boolean
-        }).__GPD_GOOGLE_COMMAND_HANDLER_LOADED__
+        (
+          window as typeof window & {
+            __GPD_GOOGLE_COMMAND_HANDLER_LOADED__?: boolean
+          }
+        ).__GPD_GOOGLE_COMMAND_HANDLER_LOADED__
       )
     })
   })
@@ -262,9 +264,11 @@ async function ensureGoogleMainWorldScripts(tabId: number): Promise<boolean> {
     func: () => ({
       hasGptk: typeof window.gptkApi !== "undefined",
       hasCommandHandler: Boolean(
-        (window as typeof window & {
-          __GPD_GOOGLE_COMMAND_HANDLER_LOADED__?: boolean
-        }).__GPD_GOOGLE_COMMAND_HANDLER_LOADED__
+        (
+          window as typeof window & {
+            __GPD_GOOGLE_COMMAND_HANDLER_LOADED__?: boolean
+          }
+        ).__GPD_GOOGLE_COMMAND_HANDLER_LOADED__
       )
     })
   })
@@ -480,27 +484,32 @@ async function openProviderInCurrentTab(
   tab?: chrome.tabs.Tab,
   preferredTabId?: number | null,
   allowCreate = true
-): Promise<chrome.tabs.Tab | null> {
+): Promise<{ tab: chrome.tabs.Tab; alreadyOpen: boolean } | null> {
   const url = providerOpenUrl(provider)
   const seenTabIds = new Set<number>()
 
   async function tryOpenCandidate(
     targetTab: chrome.tabs.Tab | undefined
-  ): Promise<chrome.tabs.Tab | null> {
+  ): Promise<{ tab: chrome.tabs.Tab; alreadyOpen: boolean } | null> {
     if (!targetTab || !hasTabId(targetTab) || seenTabIds.has(targetTab.id)) {
       return null
     }
     seenTabIds.add(targetTab.id)
     if (!canNavigateTabToProvider(targetTab)) return null
-    if (tabMatchesProvider(targetTab, provider)) {
-      return (
+    const alreadyOpen = tabMatchesProvider(targetTab, provider)
+    if (alreadyOpen) {
+      const focusedTab =
         (await chrome.tabs
           .update(targetTab.id, { active: true })
           .catch(() => undefined)) ?? targetTab
-      )
+      return { tab: focusedTab, alreadyOpen }
     }
     try {
-      return await chrome.tabs.update(targetTab.id, { url, active: true })
+      const openedTab = await chrome.tabs.update(targetTab.id, {
+        url,
+        active: true
+      })
+      return { tab: openedTab, alreadyOpen }
     } catch {
       // Some Chrome-owned pages reject tab updates. Try another real tab in
       // the same window before falling back to create/failure behavior.
@@ -532,7 +541,8 @@ async function openProviderInCurrentTab(
   }
 
   if (!allowCreate) return null
-  return chrome.tabs.create({ url, active: true })
+  const createdTab = await chrome.tabs.create({ url, active: true })
+  return { tab: createdTab, alreadyOpen: false }
 }
 
 function launchProviderError(
@@ -1020,12 +1030,13 @@ async function handleLaunchProvider(
   const fromSidePanel = isSidePanelSender(sender)
   const preferredTabId =
     typeof hostTabId === "number" ? hostTabId : sidePanelHostTabId
-  const providerTab = await openProviderInCurrentTab(
+  const providerOpenResult = await openProviderInCurrentTab(
     provider,
     fromSidePanel ? undefined : sender.tab,
     preferredTabId,
     !fromSidePanel
   )
+  const providerTab = providerOpenResult?.tab
   if (!providerTab || !hasTabId(providerTab)) {
     return launchProviderError(
       provider,
@@ -1044,7 +1055,7 @@ async function handleLaunchProvider(
     success: true,
     provider,
     tabId: providerTab.id,
-    alreadyOpen: tabMatchesProvider(providerTab, provider)
+    alreadyOpen: providerOpenResult.alreadyOpen
   }
 }
 

@@ -61,7 +61,7 @@ export type ScanMode = "smart" | "full"
 export type PhotoProvider = "google" | "icloud" | "amazon"
 
 export interface ScanOptions {
-  similarityThreshold: number // 0.90 - 1.00
+  similarityThreshold: number // 0.80 - 1.00
   scanMode: ScanMode
   dateRange?: {
     from?: string // ISO date string

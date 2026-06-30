@@ -28,6 +28,7 @@ import { VariableSizeList } from "react-window"
 import type { ListChildComponentProps } from "react-window"
 
 import { classifyDuplicateGroup } from "../lib/duplicate-classifier"
+import { photoSweepColors } from "../lib/theme"
 import type { DuplicateGroup, GpdMediaItem } from "../lib/types"
 import { PhotoViewerModal } from "./PhotoViewerModal"
 import { useBlobUrl } from "./useBlobUrl"
@@ -78,8 +79,11 @@ const sxPaperBase = {
   borderRadius: 3,
   border: "1px solid",
   borderColor: "divider",
-  boxShadow: "0 14px 38px rgba(0, 0, 0, 0.06)",
-  transition: "opacity 0.15s, border-color 0.15s, box-shadow 0.15s"
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.97), rgba(244,248,246,0.9))",
+  boxShadow: `0 16px 44px ${photoSweepColors.shadow}`,
+  transition:
+    "opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease"
 }
 const sxGroupHeader = {
   display: "flex",
@@ -88,7 +92,7 @@ const sxGroupHeader = {
   gap: 1,
   px: 2,
   py: 1.25,
-  backgroundColor: "rgba(255,255,255,0.82)",
+  backgroundColor: photoSweepColors.surfaceTint,
   borderBottom: "1px solid",
   borderColor: "divider",
   cursor: "pointer",
@@ -101,7 +105,7 @@ const sxThumbnailsWrapper = {
   flexWrap: "wrap",
   gap: 1.5,
   p: 1.5,
-  backgroundColor: "rgba(255,255,255,0.44)"
+  backgroundColor: "rgba(244,248,246,0.72)"
 }
 const sxItemWrapper = {
   position: "relative",
@@ -113,10 +117,12 @@ const sxItemWrapper = {
 const sxCardBase = {
   width: "100%",
   overflow: "hidden",
-  transition: "border-color 0.15s, box-shadow 0.15s, transform 0.15s",
+  boxShadow: "0 8px 22px rgba(23, 32, 28, 0.05)",
+  transition:
+    "border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, background-color 0.15s ease",
   "&:hover": {
-    transform: "translateY(-1px)",
-    boxShadow: "0 14px 30px rgba(0, 0, 0, 0.12)"
+    transform: "translateY(-2px)",
+    boxShadow: "0 16px 34px rgba(23, 32, 28, 0.13)"
   }
 }
 const sxCardContent = {
@@ -128,15 +134,16 @@ const sxCardContent = {
 }
 const sxViewerBtn = {
   position: "absolute",
-  top: 4,
-  right: 4,
-  bgcolor: "rgba(29,29,31,0.62)",
+  top: 6,
+  right: 6,
+  bgcolor: "rgba(23,32,28,0.66)",
   color: "white",
-  transition: "opacity 0.15s",
+  transition: "opacity 0.15s ease, background-color 0.15s ease",
   minWidth: 32,
   minHeight: 32,
   backdropFilter: "blur(10px)",
-  "&:hover": { bgcolor: "rgba(29,29,31,0.78)" }
+  boxShadow: "0 8px 18px rgba(23, 32, 28, 0.24)",
+  "&:hover": { bgcolor: "rgba(23,32,28,0.84)" }
 }
 const sxOpenInFullIcon = { fontSize: 14 }
 const sxStatusChip = { width: "fit-content", height: 20, fontSize: 11 }
@@ -249,6 +256,13 @@ function ThumbnailImage({ src, alt }: { src: string; alt: string }) {
             background:
               "linear-gradient(135deg, rgba(255,255,255,0.66), rgba(255,255,255,0.08))",
             transform: "skewY(-9deg)"
+          },
+          "&:before": {
+            content: '""',
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(23,32,28,0.1))"
           }
         }}
       />
@@ -281,6 +295,7 @@ interface DuplicateGroupRowProps {
   onTrashAll: (group: DuplicateGroup) => void
   onOpenViewer: (group: DuplicateGroup, index: number) => void
   readOnly?: boolean
+  compact?: boolean
 }
 
 const DuplicateGroupRow = memo(function DuplicateGroupRow({
@@ -292,7 +307,8 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
   onToggleKept,
   onTrashAll,
   onOpenViewer,
-  readOnly = false
+  readOnly = false,
+  compact = false
 }: DuplicateGroupRowProps) {
   const classification =
     group.duplicateKind && group.matchReasons
@@ -316,8 +332,15 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
       sx={[
         sxPaperBase,
         {
+          mb: compact ? 0 : sxPaperBase.mb,
+          borderRadius: compact ? 2.25 : sxPaperBase.borderRadius,
           opacity: readOnly || isSelected ? 1 : 0.72,
-          borderColor: isSelected ? "primary.main" : "divider"
+          borderColor: isSelected ? "primary.main" : "divider",
+          boxShadow: isSelected
+            ? compact
+              ? `0 8px 22px ${photoSweepColors.primaryShadow}`
+              : `0 18px 52px ${photoSweepColors.primaryShadow}`
+            : undefined
         }
       ]}>
       {/* Group header */}
@@ -325,7 +348,16 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
         onClick={() => {
           if (!readOnly) onToggleGroup(group.id)
         }}
-        sx={sxGroupHeader}>
+        sx={[
+          sxGroupHeader,
+          compact
+            ? {
+                px: 1.1,
+                py: 1,
+                gap: 0.85
+              }
+            : undefined
+        ]}>
         {!readOnly && (
           <Checkbox
             size="small"
@@ -335,11 +367,14 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
             sx={sxCheckbox}
           />
         )}
-        <Box sx={{ flex: 1, minWidth: 180 }}>
+        <Box sx={{ flex: 1, minWidth: compact ? 0 : 180 }}>
           <Typography variant="subtitle2" fontWeight={700}>
             {group.mediaKeys.length} {groupItemKind(group, mediaItems)}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={compact ? { display: "block", lineHeight: 1.35 } : undefined}>
             Click a copy to keep it. Everything marked trash will move later.
           </Typography>
         </Box>
@@ -348,7 +383,7 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
           spacing={0.75}
           flexWrap="wrap"
           useFlexGap
-          sx={{ width: { xs: "100%", sm: "auto" } }}>
+          sx={{ width: compact ? "100%" : { xs: "100%", sm: "auto" } }}>
           <Chip
             label={`${Math.round(group.similarity * 100)}% match`}
             size="small"
@@ -380,30 +415,67 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
       </Box>
 
       {/* Thumbnails */}
-      <Box sx={sxThumbnailsWrapper}>
+      <Box
+        sx={[
+          sxThumbnailsWrapper,
+          compact
+            ? {
+                display: "grid",
+                gridTemplateColumns: "1fr",
+                gap: 1,
+                p: 1,
+                bgcolor: "rgba(244,248,246,0.52)"
+              }
+            : undefined
+        ]}>
         {group.mediaKeys.map((key, itemIndex) => {
           const item = mediaItems[key]
           if (!item) return null
           const isKept = keptSet.has(key)
 
           return (
-            <Box key={key} sx={sxItemWrapper}>
+            <Box
+              key={key}
+              sx={[
+                sxItemWrapper,
+                compact
+                  ? {
+                      width: "100%",
+                      "& .viewer-btn": { opacity: 1 }
+                    }
+                  : undefined
+              ]}>
               <Card
                 variant="outlined"
                 sx={[
                   sxCardBase,
                   {
+                    "&:hover": compact
+                      ? {
+                          transform: "none",
+                          boxShadow: "0 8px 18px rgba(23, 32, 28, 0.08)"
+                        }
+                      : sxCardBase["&:hover"],
                     bgcolor: isKept
-                      ? "rgba(234, 244, 255, 0.68)"
+                      ? "rgba(228, 243, 241, 0.8)"
                       : isSelected
-                        ? "rgba(255, 236, 236, 0.58)"
+                        ? "rgba(253, 235, 232, 0.55)"
                         : "background.paper",
                     borderColor: isKept
                       ? "primary.main"
                       : isSelected
                         ? "error.main"
                         : "divider",
-                    borderWidth: isKept || isSelected ? 2 : 1
+                    borderWidth: isKept || isSelected ? 2 : 1,
+                    boxShadow: isKept
+                      ? compact
+                        ? `0 6px 16px ${photoSweepColors.primaryShadow}`
+                        : `0 12px 28px ${photoSweepColors.primaryShadow}`
+                      : isSelected
+                        ? compact
+                          ? "0 6px 16px rgba(217, 74, 61, 0.1)"
+                          : "0 12px 28px rgba(217, 74, 61, 0.11)"
+                        : undefined
                   }
                 ]}>
                 <CardActionArea
@@ -530,6 +602,7 @@ interface DuplicateGroupsProps {
   onTrashAll: (group: DuplicateGroup) => void
   readOnly?: boolean
   heading?: string
+  compact?: boolean
 }
 
 interface VirtualGroupListData {
@@ -578,7 +651,8 @@ export function DuplicateGroups({
   onToggleKept,
   onTrashAll,
   readOnly = false,
-  heading
+  heading,
+  compact = false
 }: DuplicateGroupsProps) {
   // Measure time from first non-empty groups render to commit
   const renderLoggedRef = useRef(false)
@@ -712,28 +786,57 @@ export function DuplicateGroups({
   }
 
   return (
-    <Box sx={{ pb: 6 }}>
+    <Box sx={{ pb: compact ? 2 : 6 }}>
       <Box
         sx={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-end",
           gap: 2,
-          mb: 1.5
+          mb: compact ? 1 : 1.5
         }}>
         <Box>
-          <Typography variant="h6">
-            {heading ??
-              `${groups.length} Duplicate Set${groups.length !== 1 ? "s" : ""} Ready`}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          {!compact && (
+            <Typography variant="h6" fontWeight={700}>
+              {heading ??
+                `${groups.length} Duplicate Set${groups.length !== 1 ? "s" : ""} Ready`}
+            </Typography>
+          )}
+          <Typography
+            variant={compact ? "caption" : "body2"}
+            color="text.secondary"
+            sx={
+              compact
+                ? { display: "block", lineHeight: 1.35, mt: 0.25 }
+                : undefined
+            }>
             Pick what stays, or use Trash all copies for a set you do not want
             to keep.
           </Typography>
         </Box>
       </Box>
 
-      {listGroups.length > 0 && (
+      {compact && listGroups.length > 0 && (
+        <Box sx={{ display: "grid", gap: 1.25 }}>
+          {listGroups.map((group) => (
+            <DuplicateGroupRow
+              key={group.id}
+              group={group}
+              mediaItems={mediaItems}
+              isSelected={selectedGroupIds.has(group.id)}
+              keptSet={keptByGroupId.get(group.id) ?? new Set()}
+              onToggleGroup={onToggleGroup}
+              onToggleKept={onToggleKept}
+              onTrashAll={onTrashAll}
+              onOpenViewer={onOpenViewer}
+              readOnly={readOnly}
+              compact
+            />
+          ))}
+        </Box>
+      )}
+
+      {!compact && listGroups.length > 0 && (
         <Box ref={listContainerRef} data-testid="duplicate-groups-virtual-list">
           <VariableSizeList
             ref={listRef}

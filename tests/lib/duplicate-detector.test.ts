@@ -1,4 +1,5 @@
-import { afterEach, describe, it, expect, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
 import {
   blockPairCountForItems,
   communityDetection,
@@ -14,10 +15,10 @@ import {
   mergeDuplicateItemGroups,
   selectDefaultKeep,
   shouldCompareSmartTimestamps,
-  smartScanEmbeddingCandidates,
   smartDetectDuplicates,
+  smartScanEmbeddingCandidates,
   topK,
-  withinGroupDuplicates,
+  withinGroupDuplicates
 } from "../../lib/duplicate-detector"
 import type { GpdMediaItem } from "../../lib/types"
 
@@ -139,11 +140,13 @@ describe("matMul", () => {
 describe("computeEmbeddings", () => {
   it("drops cached embeddings whose dimension does not match the dominant cache dimension", async () => {
     const cache = {
-      getCompatibleMany: vi.fn().mockResolvedValue([
-        new Float32Array([1, 0, 0]),
-        new Float32Array([1, 0]),
-        new Float32Array([0, 1, 0])
-      ])
+      getCompatibleMany: vi
+        .fn()
+        .mockResolvedValue([
+          new Float32Array([1, 0, 0]),
+          new Float32Array([1, 0]),
+          new Float32Array([0, 1, 0])
+        ])
     }
 
     const { embeddings, validIndices } = await computeEmbeddings(
@@ -190,11 +193,16 @@ describe("computeEmbeddings", () => {
 
       constructor(_url: string) {}
 
-      postMessage(message: { type: string; data?: { modelBuffer?: ArrayBuffer } }, transfer?: Transferable[]) {
+      postMessage(
+        message: { type: string; data?: { modelBuffer?: ArrayBuffer } },
+        transfer?: Transferable[]
+      ) {
         if (message.type === "init") {
           FailingWorker.initPayloadBuffer = message.data?.modelBuffer ?? null
           FailingWorker.initTransferBuffer = transfer?.[0] as ArrayBuffer
-          queueMicrotask(() => this.onmessage?.({ data: { type: "ready" } } as MessageEvent))
+          queueMicrotask(() =>
+            this.onmessage?.({ data: { type: "ready" } } as MessageEvent)
+          )
           return
         }
         if (message.type === "embed") {
@@ -220,7 +228,9 @@ describe("computeEmbeddings", () => {
       )
     ).rejects.toThrow("worker crashed")
 
-    expect(FailingWorker.initPayloadBuffer).toBe(FailingWorker.initTransferBuffer)
+    expect(FailingWorker.initPayloadBuffer).toBe(
+      FailingWorker.initTransferBuffer
+    )
 
     vi.stubGlobal("chrome", originalChrome)
     vi.stubGlobal("Worker", originalWorker)
@@ -298,12 +308,12 @@ describe("communityDetection", () => {
     const trio = [
       addNoise(new Float32Array(base), 0.001),
       addNoise(new Float32Array(base), 0.001),
-      addNoise(new Float32Array(base), 0.001),
+      addNoise(new Float32Array(base), 0.001)
     ]
     const singletonBase = unitVector(DIM, 0)
     const pair = [
       addNoise(new Float32Array(singletonBase), 0.001),
-      addNoise(new Float32Array(singletonBase), 0.001),
+      addNoise(new Float32Array(singletonBase), 0.001)
     ]
 
     const groups = communityDetection([...trio, ...pair], THRESHOLD)
@@ -352,7 +362,7 @@ function makeItem(
   mediaKey: string,
   timestamp: number,
   creationTimestamp = 0,
-  extra: Partial<GpdMediaItem> = {},
+  extra: Partial<GpdMediaItem> = {}
 ): GpdMediaItem {
   return {
     mediaKey,
@@ -360,7 +370,7 @@ function makeItem(
     thumb: `https://example.com/${mediaKey}`,
     timestamp,
     creationTimestamp,
-    ...extra,
+    ...extra
   }
 }
 
@@ -462,10 +472,7 @@ describe("video metadata duplicate detection", () => {
       "amazon-a",
       "amazon-b"
     ])
-    expect(groups[0].map((item) => item.dedupKey)).toEqual([
-      "node-a",
-      "node-b"
-    ])
+    expect(groups[0].map((item) => item.dedupKey)).toEqual(["node-a", "node-b"])
   })
 
   it("groups videos with matching duration, dimensions, and filename even when upload dates differ", () => {
@@ -590,6 +597,35 @@ describe("video metadata duplicate detection", () => {
 
     expect(groups).toHaveLength(1)
     expect(groups[0].map((item) => item.mediaKey)).toEqual(["a", "b"])
+  })
+
+  it("lets loose video poster sensitivity catch lower-similarity clips", () => {
+    const a = makeItem("a", 1000, 100, { duration: 7000 })
+    const b = makeItem("b", 2000, 200, { duration: 7100 })
+    const embeddings = [
+      l2normalize(new Float32Array([1, 0, 0])),
+      l2normalize(new Float32Array([0.84, 0.54, 0]))
+    ]
+
+    expect(
+      findVideoPosterDuplicateGroups([a, b], embeddings, [0, 1], 0.9)
+    ).toEqual([])
+    expect(
+      findVideoPosterDuplicateGroups([a, b], embeddings, [0, 1], 0.8)
+    ).toHaveLength(1)
+  })
+
+  it("does not relax near-exact video poster sensitivity", () => {
+    const a = makeItem("a", 1000, 100, { duration: 7000 })
+    const b = makeItem("b", 2000, 200, { duration: 7100 })
+    const embeddings = [
+      l2normalize(new Float32Array([1, 0, 0])),
+      l2normalize(new Float32Array([0.985, 0.172, 0]))
+    ]
+
+    expect(
+      findVideoPosterDuplicateGroups([a, b], embeddings, [0, 1], 0.99)
+    ).toEqual([])
   })
 
   it("does not group similar video posters when durations differ substantially", () => {
@@ -745,7 +781,11 @@ describe("groupByTimestamp", () => {
   })
 
   it("handles three-way same-timestamp group", () => {
-    const items = [makeItem("a", 5000), makeItem("b", 5000), makeItem("c", 5000)]
+    const items = [
+      makeItem("a", 5000),
+      makeItem("b", 5000),
+      makeItem("c", 5000)
+    ]
     const result = groupByTimestamp(items)
     expect(result).toHaveLength(1)
     expect(result[0]).toHaveLength(3)
@@ -756,7 +796,7 @@ describe("groupByTimestamp", () => {
       makeItem("a", 1000),
       makeItem("b", 1000),
       makeItem("c", 2000),
-      makeItem("d", 2000),
+      makeItem("d", 2000)
     ]
     const result = groupByTimestamp(items)
     expect(result).toHaveLength(2)
@@ -764,10 +804,16 @@ describe("groupByTimestamp", () => {
   })
 
   it("excludes singleton buckets (only groups of ≥2)", () => {
-    const items = [makeItem("a", 1000), makeItem("b", 2000), makeItem("c", 2000)]
+    const items = [
+      makeItem("a", 1000),
+      makeItem("b", 2000),
+      makeItem("c", 2000)
+    ]
     const result = groupByTimestamp(items)
     expect(result).toHaveLength(1)
-    expect(result[0].map((i) => i.mediaKey)).toEqual(expect.arrayContaining(["b", "c"]))
+    expect(result[0].map((i) => i.mediaKey)).toEqual(
+      expect.arrayContaining(["b", "c"])
+    )
   })
 
   it("windowMs=1000 groups nearby items", () => {
@@ -805,11 +851,11 @@ describe("groupByProviderSequence", () => {
   it("groups adjacent items from the same provider order", () => {
     const a = makeItem("a", 1000, 0, {
       provider: "icloud",
-      sequenceIndex: 151,
+      sequenceIndex: 151
     })
     const b = makeItem("b", 5032, 0, {
       provider: "icloud",
-      sequenceIndex: 152,
+      sequenceIndex: 152
     })
 
     const result = groupByProviderSequence([a, b])
@@ -821,11 +867,11 @@ describe("groupByProviderSequence", () => {
   it("keeps different providers in separate sequence groups", () => {
     const a = makeItem("a", 1000, 0, {
       provider: "icloud",
-      sequenceIndex: 1,
+      sequenceIndex: 1
     })
     const b = makeItem("b", 1000, 0, {
       provider: "google",
-      sequenceIndex: 2,
+      sequenceIndex: 2
     })
 
     expect(groupByProviderSequence([a, b])).toEqual([])
@@ -841,11 +887,11 @@ describe("groupByProviderSequence", () => {
   it("does not group adjacent provider items when their timestamps are far apart", () => {
     const a = makeItem("a", 1000, 0, {
       provider: "icloud",
-      sequenceIndex: 1,
+      sequenceIndex: 1
     })
     const b = makeItem("b", 3_601_000, 0, {
       provider: "icloud",
-      sequenceIndex: 2,
+      sequenceIndex: 2
     })
 
     expect(groupByProviderSequence([a, b])).toEqual([])
@@ -872,10 +918,11 @@ describe("withinGroupDuplicates", () => {
 
   function makeEmbeddingMap(
     items: GpdMediaItem[],
-    embeddings: Float32Array[],
+    embeddings: Float32Array[]
   ): Map<string, Float32Array> {
     const map = new Map<string, Float32Array>()
-    for (let i = 0; i < items.length; i++) map.set(items[i].mediaKey, embeddings[i])
+    for (let i = 0; i < items.length; i++)
+      map.set(items[i].mediaKey, embeddings[i])
     return map
   }
 
@@ -901,9 +948,24 @@ describe("withinGroupDuplicates", () => {
     expect(groups).toHaveLength(0)
   })
 
+  it("changes visual grouping when the threshold is moved from strict to loose", () => {
+    const a = makeItem("a", 1000)
+    const b = makeItem("b", 1000)
+    const embA = l2normalize(new Float32Array([1, 0, 0]))
+    const embB = l2normalize(new Float32Array([0.86, 0.51, 0]))
+    const map = makeEmbeddingMap([a, b], [embA, embB])
+
+    expect(withinGroupDuplicates([a, b], map, 0.9, 0)).toHaveLength(0)
+    expect(withinGroupDuplicates([a, b], map, 0.8, 0)).toHaveLength(1)
+  })
+
   it("handles transitive grouping: A~B and B~C → single group {A,B,C}", () => {
     const base = l2normalize(new Float32Array(DIM).map(() => Math.random()))
-    const items = [makeItem("a", 1000), makeItem("b", 1000), makeItem("c", 1000)]
+    const items = [
+      makeItem("a", 1000),
+      makeItem("b", 1000),
+      makeItem("c", 1000)
+    ]
     const embs = items.map(() => addNoise(new Float32Array(base), 0.001))
     const map = makeEmbeddingMap(items, embs)
     const groups = withinGroupDuplicates(items, map, THRESHOLD, 0)
@@ -918,13 +980,13 @@ describe("withinGroupDuplicates", () => {
       makeItem("a", 1000),
       makeItem("b", 1000),
       makeItem("c", 1000),
-      makeItem("d", 1000),
+      makeItem("d", 1000)
     ]
     const embs = [
       addNoise(new Float32Array(base1), 0.001),
       addNoise(new Float32Array(base1), 0.001),
       addNoise(new Float32Array(base2), 0.001),
-      addNoise(new Float32Array(base2), 0.001),
+      addNoise(new Float32Array(base2), 0.001)
     ]
     const map = makeEmbeddingMap(items, embs)
     const groups = withinGroupDuplicates(items, map, THRESHOLD, 0)
@@ -937,10 +999,13 @@ describe("withinGroupDuplicates", () => {
     const a = makeItem("a", 1000)
     const b = makeItem("b", 1000)
     const missing = makeItem("missing", 1000)
-    const map = makeEmbeddingMap([a, b], [
-      addNoise(new Float32Array(base), 0.001),
-      addNoise(new Float32Array(base), 0.001),
-    ])
+    const map = makeEmbeddingMap(
+      [a, b],
+      [
+        addNoise(new Float32Array(base), 0.001),
+        addNoise(new Float32Array(base), 0.001)
+      ]
+    )
     // missing has no entry in map
     const groups = withinGroupDuplicates([a, b, missing], map, THRESHOLD, 0)
     expect(groups).toHaveLength(1)
@@ -953,7 +1018,7 @@ describe("withinGroupDuplicates", () => {
     const newer = makeItem("newer", 1000, 200)
     const embs = [
       addNoise(new Float32Array(base), 0.001),
-      addNoise(new Float32Array(base), 0.001),
+      addNoise(new Float32Array(base), 0.001)
     ]
     const map = makeEmbeddingMap([older, newer], embs)
     const groups = withinGroupDuplicates([newer, older], map, THRESHOLD, 0)
@@ -962,7 +1027,9 @@ describe("withinGroupDuplicates", () => {
 
   it("each item appears in at most one group (no double-count)", () => {
     const base = l2normalize(new Float32Array(DIM).map(() => Math.random()))
-    const items = Array.from({ length: 5 }, (_, i) => makeItem(`item${i}`, 1000))
+    const items = Array.from({ length: 5 }, (_, i) =>
+      makeItem(`item${i}`, 1000)
+    )
     const embs = items.map(() => addNoise(new Float32Array(base), 0.001))
     const map = makeEmbeddingMap(items, embs)
     const groups = withinGroupDuplicates(items, map, THRESHOLD, 0)
@@ -977,12 +1044,14 @@ describe("withinGroupDuplicates", () => {
     const pair = Array.from({ length: 2 }, (_, i) => makeItem(`pair${i}`, 1000))
     const embs = [
       ...trio.map(() => addNoise(new Float32Array(base1), 0.001)),
-      ...pair.map(() => addNoise(new Float32Array(base2), 0.001)),
+      ...pair.map(() => addNoise(new Float32Array(base2), 0.001))
     ]
     const map = makeEmbeddingMap([...trio, ...pair], embs)
     const groups = withinGroupDuplicates([...trio, ...pair], map, THRESHOLD, 0)
     if (groups.length >= 2) {
-      expect(groups[0].mediaKeys.length).toBeGreaterThanOrEqual(groups[1].mediaKeys.length)
+      expect(groups[0].mediaKeys.length).toBeGreaterThanOrEqual(
+        groups[1].mediaKeys.length
+      )
     }
   })
 })
@@ -992,10 +1061,7 @@ describe("withinGroupDuplicates", () => {
 // ============================================================
 
 describe("selectDefaultKeep", () => {
-  function item(
-    key: string,
-    opts: Partial<GpdMediaItem> = {},
-  ): GpdMediaItem {
+  function item(key: string, opts: Partial<GpdMediaItem> = {}): GpdMediaItem {
     return {
       mediaKey: key,
       dedupKey: key,
@@ -1005,37 +1071,77 @@ describe("selectDefaultKeep", () => {
       resWidth: opts.resWidth,
       resHeight: opts.resHeight,
       isOriginalQuality: opts.isOriginalQuality,
-      ...opts,
+      ...opts
     }
   }
 
   it("prefers original quality over storage saver regardless of resolution", () => {
-    const saver = item("saver", { isOriginalQuality: false, resWidth: 4000, resHeight: 3000 })
-    const original = item("original", { isOriginalQuality: true, resWidth: 100, resHeight: 100 })
+    const saver = item("saver", {
+      isOriginalQuality: false,
+      resWidth: 4000,
+      resHeight: 3000
+    })
+    const original = item("original", {
+      isOriginalQuality: true,
+      resWidth: 100,
+      resHeight: 100
+    })
     expect(selectDefaultKeep([saver, original])).toBe("original")
   })
 
   it("prefers original quality over null quality", () => {
-    const unknown = item("unknown", { isOriginalQuality: null, resWidth: 4000, resHeight: 3000 })
-    const original = item("original", { isOriginalQuality: true, resWidth: 100, resHeight: 100 })
+    const unknown = item("unknown", {
+      isOriginalQuality: null,
+      resWidth: 4000,
+      resHeight: 3000
+    })
+    const original = item("original", {
+      isOriginalQuality: true,
+      resWidth: 100,
+      resHeight: 100
+    })
     expect(selectDefaultKeep([unknown, original])).toBe("original")
   })
 
   it("prefers null quality over storage saver", () => {
-    const saver = item("saver", { isOriginalQuality: false, resWidth: 4000, resHeight: 3000 })
-    const unknown = item("unknown", { isOriginalQuality: null, resWidth: 100, resHeight: 100 })
+    const saver = item("saver", {
+      isOriginalQuality: false,
+      resWidth: 4000,
+      resHeight: 3000
+    })
+    const unknown = item("unknown", {
+      isOriginalQuality: null,
+      resWidth: 100,
+      resHeight: 100
+    })
     expect(selectDefaultKeep([saver, unknown])).toBe("unknown")
   })
 
   it("prefers higher resolution when quality is tied (both original)", () => {
-    const small = item("small", { isOriginalQuality: true, resWidth: 800, resHeight: 600 })
-    const large = item("large", { isOriginalQuality: true, resWidth: 3000, resHeight: 2000 })
+    const small = item("small", {
+      isOriginalQuality: true,
+      resWidth: 800,
+      resHeight: 600
+    })
+    const large = item("large", {
+      isOriginalQuality: true,
+      resWidth: 3000,
+      resHeight: 2000
+    })
     expect(selectDefaultKeep([small, large])).toBe("large")
   })
 
   it("prefers higher resolution when quality is tied (both null)", () => {
-    const small = item("small", { resWidth: 800, resHeight: 600, creationTimestamp: 1 })
-    const large = item("large", { resWidth: 3000, resHeight: 2000, creationTimestamp: 2 })
+    const small = item("small", {
+      resWidth: 800,
+      resHeight: 600,
+      creationTimestamp: 1
+    })
+    const large = item("large", {
+      resWidth: 3000,
+      resHeight: 2000,
+      creationTimestamp: 2
+    })
     expect(selectDefaultKeep([small, large])).toBe("large")
   })
 
@@ -1100,14 +1206,22 @@ describe("selectDefaultKeep", () => {
       resWidth: 1000,
       resHeight: 1000
     })
-    expect(selectDefaultKeep([olderSaver, newerOriginal])).toBe(
-      "newerOriginal"
-    )
+    expect(selectDefaultKeep([olderSaver, newerOriginal])).toBe("newerOriginal")
   })
 
   it("prefers oldest upload date as tiebreaker when quality, taken date, and resolution are equal", () => {
-    const newer = item("newer", { isOriginalQuality: true, resWidth: 1920, resHeight: 1080, creationTimestamp: 200 })
-    const older = item("older", { isOriginalQuality: true, resWidth: 1920, resHeight: 1080, creationTimestamp: 100 })
+    const newer = item("newer", {
+      isOriginalQuality: true,
+      resWidth: 1920,
+      resHeight: 1080,
+      creationTimestamp: 200
+    })
+    const older = item("older", {
+      isOriginalQuality: true,
+      resWidth: 1920,
+      resHeight: 1080,
+      creationTimestamp: 100
+    })
     expect(selectDefaultKeep([newer, older])).toBe("older")
   })
 
@@ -1140,13 +1254,27 @@ describe("selectDefaultKeep", () => {
   })
 
   it("returns the single item in a one-item array", () => {
-    const only = item("only", { isOriginalQuality: true, resWidth: 1920, resHeight: 1080 })
+    const only = item("only", {
+      isOriginalQuality: true,
+      resWidth: 1920,
+      resHeight: 1080
+    })
     expect(selectDefaultKeep([only])).toBe("only")
   })
 
   it("handles all items with equal criteria — returns first in stable order", () => {
-    const a = item("a", { isOriginalQuality: true, resWidth: 1920, resHeight: 1080, creationTimestamp: 0 })
-    const b = item("b", { isOriginalQuality: true, resWidth: 1920, resHeight: 1080, creationTimestamp: 0 })
+    const a = item("a", {
+      isOriginalQuality: true,
+      resWidth: 1920,
+      resHeight: 1080,
+      creationTimestamp: 0
+    })
+    const b = item("b", {
+      isOriginalQuality: true,
+      resWidth: 1920,
+      resHeight: 1080,
+      creationTimestamp: 0
+    })
     const result = selectDefaultKeep([a, b])
     expect(["a", "b"]).toContain(result)
   })

@@ -341,7 +341,8 @@ describe("launch flow", () => {
     expect(response).toMatchObject({
       success: true,
       provider: "amazon",
-      tabId: 52
+      tabId: 52,
+      alreadyOpen: false
     })
   })
 
@@ -359,6 +360,28 @@ describe("launch flow", () => {
 
     expect(mockChrome.tabs.update).toHaveBeenCalledWith(12, { active: true })
     expect(mockChrome.tabs.create).not.toHaveBeenCalled()
+  })
+
+  it("marks launchProvider as alreadyOpen only when the chosen tab matched before navigation", async () => {
+    mockChrome.tabs.query.mockResolvedValue([
+      { id: 12, url: "https://www.amazon.ca/photos?sf=1" }
+    ])
+    mockChrome.tabs.update.mockResolvedValue({
+      id: 12,
+      url: "https://www.amazon.ca/photos?sf=1"
+    })
+
+    const response = await dispatchMessageWithResponse(
+      { app: APP_ID, action: "launchProvider", provider: "amazon" },
+      { url: "chrome-extension://test/tabs/scanner-panel.html" }
+    )
+
+    expect(response).toMatchObject({
+      success: true,
+      provider: "amazon",
+      tabId: 12,
+      alreadyOpen: true
+    })
   })
 
   it("navigates a Chrome-owned active tab instead of failing side-panel Open", async () => {
@@ -629,16 +652,17 @@ describe("healthCheck", () => {
       return Promise.resolve([{ id: appTabId }])
     })
     mockChrome.tabs.sendMessage.mockImplementation(
-      (
-        _tabId: number,
-        msg: { action?: string }
-      ) => {
+      (_tabId: number, msg: { action?: string }) => {
         if (msg?.action === "ping") return Promise.resolve()
         return Promise.resolve()
       }
     )
     mockChrome.scripting.executeScript.mockImplementation(
-      ({ args }: { args?: Array<{ command?: string; requestId?: string }> }) => {
+      ({
+        args
+      }: {
+        args?: Array<{ command?: string; requestId?: string }>
+      }) => {
         const msg = args?.[0]
         if (msg?.command === "healthCheck") {
           setTimeout(() => {

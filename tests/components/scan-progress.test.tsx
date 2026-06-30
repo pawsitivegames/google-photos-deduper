@@ -8,14 +8,13 @@
  * - Item counts in caption text
  * - Pause button visibility and callback
  */
-import { createTheme, ThemeProvider } from "@mui/material/styles"
+import { ThemeProvider } from "@mui/material/styles"
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { ScanProgress } from "../../components/ScanProgress"
+import theme from "../../lib/theme"
 import type { ScanPhase } from "../../lib/types"
-
-const theme = createTheme()
 
 interface Props {
   phase?: ScanPhase

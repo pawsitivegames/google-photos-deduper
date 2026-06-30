@@ -181,7 +181,7 @@ function FullResMedia({ item, blob }: FullResMediaProps) {
               boxShadow: "0 18px 44px rgba(0,0,0,0.35)",
               "&:hover": { bgcolor: "white" }
             }}>
-            Play in Google Photos
+            Play in {providerLabel(item)}
           </Button>
         )}
       </Box>

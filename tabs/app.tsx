@@ -13,6 +13,7 @@ import PhotoLibraryRoundedIcon from "@mui/icons-material/PhotoLibraryRounded"
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded"
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded"
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded"
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded"
 import Alert from "@mui/material/Alert"
 import AppBar from "@mui/material/AppBar"
 import Box from "@mui/material/Box"
@@ -32,6 +33,7 @@ import Snackbar from "@mui/material/Snackbar"
 import { ThemeProvider } from "@mui/material/styles"
 import TextField from "@mui/material/TextField"
 import Toolbar from "@mui/material/Toolbar"
+import Tooltip from "@mui/material/Tooltip"
 import Typography from "@mui/material/Typography"
 import confetti from "canvas-confetti"
 import {
@@ -79,7 +81,7 @@ import {
 } from "../lib/scan-checkpoint"
 import { ScanLogger } from "../lib/scan-log"
 import { areScanResultsValid } from "../lib/scan-results"
-import theme from "../lib/theme"
+import theme, { photoSweepColors } from "../lib/theme"
 import {
   buildTrashResultReport,
   type TrashResultReport
@@ -216,10 +218,10 @@ function WorkflowRail({
         border: "1px solid",
         borderColor: "divider",
         borderRadius: compact ? 2 : 3,
-        bgcolor: compact ? "#FFFFFF" : "rgba(255,255,255,0.72)",
+        bgcolor: compact ? photoSweepColors.surface : "rgba(255,255,255,0.72)",
         backdropFilter: compact ? "none" : "saturate(180%) blur(22px)",
         overflow: "hidden",
-        boxShadow: compact ? "none" : "0 20px 56px rgba(0, 0, 0, 0.08)"
+        boxShadow: compact ? "none" : `0 20px 56px ${photoSweepColors.shadow}`
       }}>
       <Box
         sx={{
@@ -445,7 +447,7 @@ function SidePanelConnectionSetup({
           border: "1px solid",
           borderColor: "divider",
           borderRadius: 2,
-          bgcolor: "#FFFFFF",
+          bgcolor: photoSweepColors.surface,
           p: 1.25
         }}>
         <Typography variant="overline" color="text.secondary">
@@ -517,151 +519,197 @@ function SidePanelConnectionSetup({
 
 type TimelineStepStatus = "complete" | "active" | "locked"
 
-function SidePanelTimelineStep({
-  index,
-  title,
-  description,
-  status,
-  icon,
-  summary,
-  children
-}: {
+type SidePanelStepItem = {
   index: number
   title: string
   description: string
   status: TimelineStepStatus
   icon: ReactNode
   summary?: string
+}
+
+function SidePanelTimelineProgress({ steps }: { steps: SidePanelStepItem[] }) {
+  return (
+    <Box
+      component="ol"
+      aria-label="Setup progress"
+      sx={{
+        listStyle: "none",
+        m: 0,
+        p: 0.8,
+        display: "grid",
+        gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+        gap: 0.35,
+        border: "1px solid",
+        borderColor: photoSweepColors.border,
+        borderRadius: 2,
+        bgcolor: photoSweepColors.surface,
+        boxShadow: `0 4px 14px ${photoSweepColors.shadow}`,
+        overflow: "hidden"
+      }}>
+      {steps.map((step, position) => {
+        const isActive = step.status === "active"
+        const isComplete = step.status === "complete"
+        const markerColor = isComplete
+          ? photoSweepColors.success
+          : isActive
+            ? photoSweepColors.primary
+            : "#8B95A3"
+        const statusLabel = isComplete
+          ? "Done"
+          : isActive
+            ? "Current"
+            : "Locked"
+        const tooltip = `${step.title}: ${statusLabel}${
+          step.summary ? `, ${step.summary}` : ""
+        }`
+
+        return (
+          <Tooltip key={step.title} title={tooltip} arrow>
+            <Box
+              component="li"
+              aria-current={isActive ? "step" : undefined}
+              aria-label={tooltip}
+              sx={{
+                minWidth: 0,
+                position: "relative",
+                display: "grid",
+                justifyItems: "center",
+                alignContent: "start",
+                gap: 0.45,
+                px: 0.2,
+                py: 0.2,
+                color: markerColor,
+                opacity: step.status === "locked" ? 0.62 : 1,
+                "&::before":
+                  position === 0
+                    ? undefined
+                    : {
+                        content: '""',
+                        position: "absolute",
+                        top: 15,
+                        right: "50%",
+                        width: "100%",
+                        height: 2,
+                        bgcolor:
+                          steps[position - 1]?.status === "complete"
+                            ? photoSweepColors.success
+                            : photoSweepColors.border,
+                        zIndex: 0
+                      }
+              }}>
+              <Box
+                sx={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: "50%",
+                  display: "grid",
+                  placeItems: "center",
+                  border: "2px solid",
+                  borderColor: markerColor,
+                  bgcolor: isComplete
+                    ? photoSweepColors.successSoft
+                    : isActive
+                      ? photoSweepColors.primarySoft
+                      : photoSweepColors.surfaceSoft,
+                  boxShadow: isActive
+                    ? `0 0 0 3px ${photoSweepColors.primaryShadow}`
+                    : "none",
+                  zIndex: 1,
+                  "& svg": {
+                    fontSize: 15
+                  }
+                }}>
+                {isComplete ? (
+                  <CheckCircleRoundedIcon sx={{ fontSize: 15 }} />
+                ) : isActive ? (
+                  step.index
+                ) : (
+                  step.icon
+                )}
+              </Box>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  maxWidth: "100%",
+                  fontSize: 10.75,
+                  lineHeight: 1.1,
+                  fontWeight: isActive ? 850 : 750,
+                  color: isActive ? photoSweepColors.ink : markerColor,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis"
+                }}>
+                {step.title}
+              </Typography>
+            </Box>
+          </Tooltip>
+        )
+      })}
+    </Box>
+  )
+}
+
+function SidePanelTimelineStep({
+  title,
+  description,
+  status,
+  summary,
+  children
+}: SidePanelStepItem & {
   children?: ReactNode
 }) {
   const isActive = status === "active"
-  const isComplete = status === "complete"
-  const isCollapsed = !isActive
-  const markerColor = isComplete ? "#148A43" : isActive ? "#0B63F6" : "#9AA4B2"
-  const borderColor = isActive ? "#B8D4FF" : "#E3E8F0"
+  if (!isActive || !children) return null
 
   return (
     <Box
       sx={{
-        display: "grid",
-        gridTemplateColumns: isCollapsed
-          ? "28px minmax(0, 1fr)"
-          : "34px minmax(0, 1fr)",
-        gap: isCollapsed ? 0.75 : 1,
-        position: "relative",
-        "&:not(:last-of-type)::before": {
-          content: '""',
-          position: "absolute",
-          left: isCollapsed ? 13 : 16,
-          top: isCollapsed ? 31 : 38,
-          bottom: isCollapsed ? -12 : -14,
-          width: 2,
-          bgcolor: isComplete ? "#148A43" : "#D7DEE8"
-        }
-      }}>
+        minWidth: 0,
+          border: "1px solid",
+          borderColor: photoSweepColors.primaryBorder,
+          borderRadius: 2.25,
+          bgcolor: photoSweepColors.surface,
+          boxShadow: `0 14px 36px ${photoSweepColors.shadow}`,
+          overflow: "hidden"
+        }}>
       <Box
         sx={{
-          width: isCollapsed ? 28 : 34,
-          height: isCollapsed ? 28 : 34,
-          borderRadius: "50%",
-          display: "grid",
-          placeItems: "center",
-          bgcolor: isComplete ? "#EAF7EF" : isActive ? "#EAF2FF" : "#F4F6F9",
-          border: "2px solid",
-          borderColor: markerColor,
-          color: markerColor,
-          fontWeight: 800,
-          fontSize: isCollapsed ? 12 : 14,
-          zIndex: 1
+          px: 1.15,
+          pt: 1,
+          pb: 0.85,
+          minWidth: 0,
+          borderBottom: "1px solid",
+          borderColor: photoSweepColors.border
         }}>
-        {isComplete ? (
-          <CheckCircleRoundedIcon sx={{ fontSize: isCollapsed ? 16 : 18 }} />
-        ) : (
-          index
-        )}
+        <Typography
+          variant="subtitle2"
+          fontWeight={850}
+          sx={{ lineHeight: 1.15, fontSize: 14, letterSpacing: 0 }}>
+          {title}
+        </Typography>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: "block", mt: 0.2, lineHeight: 1.3 }}>
+          {summary || description}
+        </Typography>
       </Box>
       <Box
         sx={{
-          border: "1px solid",
-          borderColor,
-          borderRadius: 2,
-          bgcolor: isActive ? "#FFFFFF" : isComplete ? "#FBFDFB" : "#F8FAFD",
-          boxShadow: isActive ? "0 14px 34px rgba(15, 23, 42, 0.08)" : "none",
-          opacity: status === "locked" ? 0.72 : 1,
-          overflow: "hidden"
+          px: 0.95,
+          pb: 0.95,
+          display: "grid",
+          gap: 0.85,
+          minWidth: 0,
+          overflow: "hidden",
+          "& > *": {
+            minWidth: 0,
+            maxWidth: "100%",
+            boxSizing: "border-box"
+          }
         }}>
-        <Box
-          sx={{
-            px: isCollapsed ? 0.85 : 1.15,
-            py: isCollapsed ? 0.7 : 1.15,
-            display: "grid",
-            gridTemplateColumns: isCollapsed
-              ? "minmax(0, 1fr) auto"
-              : "24px minmax(0, 1fr) auto",
-            gap: isCollapsed ? 0.75 : 0.9,
-            alignItems: "center"
-          }}>
-          {!isCollapsed && (
-            <Box
-              sx={{
-                color: isComplete
-                  ? "#148A43"
-                  : isActive
-                    ? "#0B63F6"
-                    : "#6B7280",
-                display: "grid",
-                placeItems: "center",
-                pt: 0.1
-              }}>
-              {icon}
-            </Box>
-          )}
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              variant="subtitle2"
-              fontWeight={850}
-              noWrap={isCollapsed}
-              sx={{
-                lineHeight: isCollapsed ? 1.2 : 1.15,
-                letterSpacing: 0,
-                fontSize: isCollapsed ? 13 : undefined
-              }}>
-              {title}
-            </Typography>
-            {!isCollapsed && (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mt: 0.2, lineHeight: 1.35 }}>
-                {isComplete && summary ? summary : description}
-              </Typography>
-            )}
-          </Box>
-          <Typography
-            variant="caption"
-            noWrap
-            sx={{
-              color: isComplete ? "#148A43" : "#6B7280",
-              fontWeight: 850,
-              lineHeight: 1,
-              maxWidth: 130,
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }}>
-            {isComplete ? summary || "Done" : isCollapsed ? "Locked" : ""}
-          </Typography>
-        </Box>
-        {isActive && children && (
-          <Box
-            sx={{
-              px: 1.15,
-              pb: 1.15,
-              display: "grid",
-              gap: 1
-            }}>
-            {children}
-          </Box>
-        )}
+        {children}
       </Box>
     </Box>
   )
@@ -683,48 +731,40 @@ function SidePanelSourceBar({
         top: 0,
         zIndex: 3,
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr)",
+        gridTemplateColumns: "minmax(0, 1fr) max-content",
+        alignItems: "center",
         gap: 0.75,
         border: "1px solid",
-        borderColor: "#D8E1EE",
+        borderColor: photoSweepColors.border,
         borderRadius: 2,
-        bgcolor: "#FFFFFF",
-        boxShadow: "0 10px 26px rgba(15, 23, 42, 0.08)",
-        p: 1
+        bgcolor: photoSweepColors.surface,
+        boxShadow: `0 4px 14px ${photoSweepColors.shadow}`,
+        p: 0.6
       }}>
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1
-        }}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          fontWeight={850}
-          sx={{ textTransform: "uppercase", letterSpacing: 0 }}>
-          Photo source
-        </Typography>
-        <Typography
-          variant="caption"
-          noWrap
-          sx={{
-            color: connected ? "#148A43" : "#6B7280",
-            fontWeight: 850,
-            maxWidth: 130,
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          }}>
-          {connected ? "Connected" : "Not connected"}
-        </Typography>
-      </Box>
       <TextField
         select
         size="small"
         fullWidth
         value={provider}
         aria-label="Photo source"
+        sx={{
+          minWidth: 0,
+          "& .MuiInputBase-root": {
+            height: 42,
+            borderRadius: 1.5,
+            bgcolor: photoSweepColors.surface
+          },
+          "& .MuiSelect-select": {
+            py: 1,
+            pr: "32px !important",
+            fontSize: 15,
+            fontWeight: 750,
+            lineHeight: 1.2
+          },
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: photoSweepColors.borderStrong
+          }
+        }}
         onChange={(event) =>
           onProviderChange(event.target.value as PhotoProvider)
         }>
@@ -732,6 +772,73 @@ function SidePanelSourceBar({
         <MenuItem value="icloud">iCloud Photos</MenuItem>
         <MenuItem value="amazon">Amazon Photos</MenuItem>
       </TextField>
+      <Typography
+        variant="caption"
+        noWrap
+        sx={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 0.45,
+          px: 0.9,
+          py: 0.65,
+          borderRadius: 999,
+          bgcolor: connected
+            ? photoSweepColors.successSoft
+            : photoSweepColors.surfaceSoft,
+          border: "1px solid",
+          borderColor: connected
+            ? "rgba(36, 138, 75, 0.18)"
+            : photoSweepColors.border,
+          color: connected ? photoSweepColors.success : photoSweepColors.muted,
+          fontWeight: 850,
+          fontSize: 11,
+          lineHeight: 1
+        }}>
+        <Box
+          component="span"
+          sx={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            bgcolor: connected ? photoSweepColors.success : photoSweepColors.muted,
+            flexShrink: 0
+          }}
+        />
+        {connected ? "Connected" : "Not connected"}
+      </Typography>
+    </Box>
+  )
+}
+
+function SidePanelBrandHeader() {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.85,
+        px: 0.35,
+        py: 0.2
+      }}>
+      <Box
+        sx={{
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
+          display: "grid",
+          placeItems: "center",
+          color: photoSweepColors.surface,
+          bgcolor: photoSweepColors.primary,
+          boxShadow: `0 8px 18px ${photoSweepColors.primaryShadow}`
+        }}>
+        <AutoAwesomeRoundedIcon sx={{ fontSize: 16 }} />
+      </Box>
+      <Typography
+        variant="subtitle1"
+        fontWeight={850}
+        sx={{ letterSpacing: 0, color: photoSweepColors.ink, lineHeight: 1 }}>
+        PhotoSweep
+      </Typography>
     </Box>
   )
 }
@@ -740,13 +847,13 @@ function SidePanelSafetyFooter() {
   return (
     <Box
       sx={{
-        mt: 1.25,
+        mt: 0,
         px: 1.2,
         py: 1.1,
         border: "1px solid",
-        borderColor: "#DCE8DD",
-        borderRadius: 2,
-        bgcolor: "#F8FCF9",
+        borderColor: photoSweepColors.border,
+        borderRadius: 1.75,
+        bgcolor: photoSweepColors.surfaceSoft,
         display: "grid",
         gridTemplateColumns: "28px minmax(0, 1fr)",
         gap: 1,
@@ -756,9 +863,9 @@ function SidePanelSafetyFooter() {
         sx={{
           width: 28,
           height: 28,
-          borderRadius: 1.5,
-          bgcolor: "#E6F6EC",
-          color: "#148A43",
+          borderRadius: 1.25,
+          bgcolor: photoSweepColors.successSoft,
+          color: photoSweepColors.success,
           display: "grid",
           placeItems: "center"
         }}>
@@ -1125,7 +1232,9 @@ export default function App() {
         if (hostProvider) {
           sidePanelHostProviderRef.current = hostProvider
           setSidePanelSourceConfirmed(true)
-          if ((settingsRef.current.sourceProvider ?? "google") !== hostProvider) {
+          if (
+            (settingsRef.current.sourceProvider ?? "google") !== hostProvider
+          ) {
             scanAbortRef.current?.abort()
             scanAbortRef.current = null
             currentScanRequestIdRef.current = null
@@ -1813,20 +1922,6 @@ export default function App() {
     chrome.storage.local.get(
       ["settings", "scanResults", "selections", SCAN_CHECKPOINT_KEY],
       (result: Partial<StoredState>) => {
-        const checkpoint = result.scanCheckpoint
-        if (checkpoint?.status === "active") {
-          const interrupted = updateScanCheckpoint(checkpoint, {
-            status: "interrupted",
-            message:
-              "Previous scan was interrupted. Resume to reuse completed cached embeddings."
-          })
-          scanCheckpointRef.current = interrupted
-          setResumeCheckpoint(interrupted)
-          void persistScanCheckpoint(interrupted)
-        } else if (shouldOfferResume(checkpoint)) {
-          scanCheckpointRef.current = checkpoint
-          setResumeCheckpoint(checkpoint)
-        }
         const restoredSettings = result.settings
           ? normalizeStoredSettings(result.settings)
           : settingsRef.current
@@ -1846,6 +1941,31 @@ export default function App() {
         if (result.settings || hostProvider) {
           settingsRef.current = storedSettings
           setSettings(storedSettings)
+        }
+        const checkpoint = result.scanCheckpoint
+        if (checkpoint?.status === "active") {
+          const interrupted = updateScanCheckpoint(checkpoint, {
+            status: "interrupted",
+            message:
+              "Previous scan was interrupted. Resume to reuse completed cached embeddings."
+          })
+          scanCheckpointRef.current = interrupted
+          if (
+            canResumeScanCheckpoint(interrupted, {
+              sourceProvider: storedSettings.sourceProvider
+            })
+          ) {
+            setResumeCheckpoint(interrupted)
+          }
+          void persistScanCheckpoint(interrupted)
+        } else if (
+          shouldOfferResume(checkpoint) &&
+          canResumeScanCheckpoint(checkpoint, {
+            sourceProvider: storedSettings.sourceProvider
+          })
+        ) {
+          scanCheckpointRef.current = checkpoint
+          setResumeCheckpoint(checkpoint)
         }
         const currentAccountEmail = currentAccountEmailRef.current
         const savedResultsAreForCurrentAccount =
@@ -2383,7 +2503,12 @@ export default function App() {
         ? currentState.accountEmail
         : resumeCheckpoint.accountEmail
 
-    if (!canResumeScanCheckpoint(resumeCheckpoint, { accountEmail })) {
+    if (
+      !canResumeScanCheckpoint(resumeCheckpoint, {
+        accountEmail,
+        sourceProvider: settingsRef.current.sourceProvider
+      })
+    ) {
       clearResumeCheckpointState({
         checkpointRef: scanCheckpointRef,
         setResumeCheckpoint
@@ -2655,53 +2780,59 @@ export default function App() {
     [isSidePanel]
   )
 
-  const handleOpenProvider = useCallback((provider: PhotoProvider) => {
-    setSidePanelSourceConfirmed(true)
-    scanAbortRef.current?.abort()
-    scanAbortRef.current = null
-    currentScanRequestIdRef.current = null
-    scanCheckpointRef.current = null
-    cachedMediaItemsRef.current = null
-    pendingSelectionsRef.current = null
-    setResumeCheckpoint(null)
-    setSelectedGroupIds(new Set())
-    setKeptOverrides({})
-    setSettings({
-      sourceProvider: provider,
-      albumScope:
-        provider === "google" ? settingsRef.current.albumScope : undefined
-    })
-    void chrome.storage.local.remove([
-      "scanResults",
-      "selections",
-      SCAN_CHECKPOINT_KEY
-    ])
-    dispatch({ type: "RESET" })
-    healthCheckAttemptsRef.current = 0
-    void openProviderFromSidePanel(provider).then((result) => {
-      if (!result.success) {
-        dispatch({
-          type: "HEALTH_CHECK_RESULT",
-          payload: {
-            app: APP_ID,
-            action: "healthCheck.result",
-            success: false,
-            hasGptk: false,
-            provider,
-            error: result.error
-          }
-        })
-        return
-      }
-      window.setTimeout(() => {
-        sendToServiceWorker({
-          app: APP_ID,
-          action: "healthCheck",
-          provider
-        })
-      }, result.alreadyOpen ? 250 : 900)
-    })
-  }, [openProviderFromSidePanel])
+  const handleOpenProvider = useCallback(
+    (provider: PhotoProvider) => {
+      setSidePanelSourceConfirmed(true)
+      scanAbortRef.current?.abort()
+      scanAbortRef.current = null
+      currentScanRequestIdRef.current = null
+      scanCheckpointRef.current = null
+      cachedMediaItemsRef.current = null
+      pendingSelectionsRef.current = null
+      setResumeCheckpoint(null)
+      setSelectedGroupIds(new Set())
+      setKeptOverrides({})
+      setSettings({
+        sourceProvider: provider,
+        albumScope:
+          provider === "google" ? settingsRef.current.albumScope : undefined
+      })
+      void chrome.storage.local.remove([
+        "scanResults",
+        "selections",
+        SCAN_CHECKPOINT_KEY
+      ])
+      dispatch({ type: "RESET" })
+      healthCheckAttemptsRef.current = 0
+      void openProviderFromSidePanel(provider).then((result) => {
+        if (!result.success) {
+          dispatch({
+            type: "HEALTH_CHECK_RESULT",
+            payload: {
+              app: APP_ID,
+              action: "healthCheck.result",
+              success: false,
+              hasGptk: false,
+              provider,
+              error: result.error
+            }
+          })
+          return
+        }
+        window.setTimeout(
+          () => {
+            sendToServiceWorker({
+              app: APP_ID,
+              action: "healthCheck",
+              provider
+            })
+          },
+          result.alreadyOpen ? 250 : 900
+        )
+      })
+    },
+    [openProviderFromSidePanel]
+  )
 
   const handleUndo = useCallback(() => {
     if (!undoData) return
@@ -2826,6 +2957,66 @@ export default function App() {
       : state.status === "results"
         ? "No duplicate sets"
         : "Review unlocks after scan"
+  const sidePanelSteps: SidePanelStepItem[] = [
+    {
+      index: 1,
+      title: "Source",
+      description: "Confirm the selected library and open it in this window.",
+      status: sourceStepComplete ? "complete" : "active",
+      icon: <PhotoLibraryRoundedIcon sx={{ fontSize: 15 }} />,
+      summary: providerLabel(sourceProvider)
+    },
+    {
+      index: 2,
+      title: "Sign in",
+      description: "Open the provider tab, sign in, then verify the connection.",
+      status: sidePanelHasConnection
+        ? "complete"
+        : sourceStepComplete
+          ? "active"
+          : "locked",
+      icon: <LockOutlinedIcon sx={{ fontSize: 15 }} />,
+      summary: `Connected to ${providerLabel(sourceProvider)}`
+    },
+    {
+      index: 3,
+      title: "Scope",
+      description: "Choose exactly what the scan should inspect.",
+      status: scopeStepComplete
+        ? "complete"
+        : state.status === "connected"
+          ? "active"
+          : "locked",
+      icon: <CollectionsRoundedIcon sx={{ fontSize: 15 }} />,
+      summary: sidePanelScopeSummary
+    },
+    {
+      index: 4,
+      title: "Scan",
+      description: "Find possible duplicate photos and videos.",
+      status: scanStepComplete
+        ? "complete"
+        : state.status === "scanning"
+          ? "active"
+          : "locked",
+      icon: <SearchRoundedIcon sx={{ fontSize: 15 }} />,
+      summary:
+        state.status === "results"
+          ? `${state.totalItems.toLocaleString()} items checked`
+          : workflowScanDetail
+    },
+    {
+      index: 5,
+      title: "Review",
+      description: "Choose what stays before anything moves to trash.",
+      status:
+        state.status === "results" || state.status === "trashing"
+          ? "active"
+          : "locked",
+      icon: <DoneAllRoundedIcon sx={{ fontSize: 15 }} />,
+      summary: sidePanelDuplicateSummary
+    }
+  ]
 
   return (
     <ThemeProvider theme={theme}>
@@ -2834,7 +3025,7 @@ export default function App() {
         <GlobalStyles
           styles={{
             body: {
-              background: "#F7F9FC",
+              background: `linear-gradient(180deg, ${photoSweepColors.canvasTop} 0%, ${photoSweepColors.canvasBottom} 100%)`,
               overflowX: "hidden"
             },
             "#__plasmo": {
@@ -2856,7 +3047,7 @@ export default function App() {
                 flexGrow: 1,
                 letterSpacing: 0
               }}>
-              Photo Duplicate Finder
+              PhotoSweep
             </Typography>
             {"accountEmail" in state && state.accountEmail && (
               <Typography variant="body2" color="text.secondary" noWrap>
@@ -2879,20 +3070,27 @@ export default function App() {
           mx: "auto",
           px: isSidePanel ? 1 : { xs: 2, md: 3 },
           py: isSidePanel ? 1 : { xs: 2, md: 3 },
-          minHeight: isSidePanel ? "100vh" : "calc(100vh - 64px)"
+          minHeight: isSidePanel ? "100vh" : "calc(100vh - 64px)",
+          background: isSidePanel
+            ? "transparent"
+            : `linear-gradient(180deg, rgba(246,250,248,0), ${photoSweepColors.canvasBottom})`
         }}>
         {isSidePanel ? (
           <Box
             sx={{
               display: "grid",
-              gap: 1.15,
-              pb: 1.5
+              gap: 0.85,
+              pb: 1
             }}>
+            <SidePanelBrandHeader />
+
             <SidePanelSourceBar
               provider={sourceProvider}
               connected={sidePanelHasConnection}
               onProviderChange={handleOpenProvider}
             />
+
+            <SidePanelTimelineProgress steps={sidePanelSteps} />
 
             <SidePanelTimelineStep
               index={1}
@@ -3099,6 +3297,7 @@ export default function App() {
                     keptByGroupId={keptByGroupId}
                     onToggleKept={handleToggleKept}
                     onTrashAll={handleTrashAllCopies}
+                    compact
                   />
                 </>
               )}
@@ -3179,11 +3378,11 @@ export default function App() {
                   cacheBusy={cacheBusy}
                   resumeCheckpoint={resumeCheckpoint}
                   albums={albums}
-                albumsLoading={albumsLoading}
-                albumsError={albumsError}
-                onRefreshAlbums={() => requestAlbums(state.accountEmail)}
-                compact={isSidePanel}
-              />
+                  albumsLoading={albumsLoading}
+                  albumsError={albumsError}
+                  onRefreshAlbums={() => requestAlbums(state.accountEmail)}
+                  compact={isSidePanel}
+                />
               )}
 
               {state.status === "scanning" && (
@@ -3270,6 +3469,7 @@ export default function App() {
                     keptByGroupId={keptByGroupId}
                     onToggleKept={handleToggleKept}
                     onTrashAll={handleTrashAllCopies}
+                    compact={isSidePanel}
                   />
                 </>
               )}
@@ -3312,7 +3512,7 @@ export default function App() {
                     border: "1px solid",
                     borderColor: "divider",
                     borderRadius: 2,
-                    bgcolor: "#FFFFFF",
+                    bgcolor: photoSweepColors.surface,
                     display: "grid",
                     gap: 0.35
                   }}>

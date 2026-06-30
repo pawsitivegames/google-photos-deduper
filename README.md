@@ -1,10 +1,10 @@
-# Google Photos Deduper
+# PhotoSweep
 
 [![CI Badge](https://github.com/mtalcott/google-photos-deduper/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mtalcott/google-photos-deduper/actions/workflows/ci.yml?query=branch%3Amain)
 
-A Chrome extension that finds duplicate photos in your Google Photos library and moves reviewed duplicates to Google Photos Trash.
+A Chrome extension that finds duplicate photos in supported cloud photo libraries and moves reviewed duplicates to provider Trash where cleanup is supported.
 
-Uses [Google Photos Toolkit (GPTK)](https://github.com/xob0t/Google-Photos-Toolkit) to access your library via Google Photos' web interface. Built with [Plasmo](https://plasmo.com/), [MediaPipe](https://developers.google.com/mediapipe), [React](https://react.dev/), and [MUI](https://mui.com/).
+Uses [Google Photos Toolkit (GPTK)](https://github.com/xob0t/Google-Photos-Toolkit) for Google Photos access, plus provider web sessions for supported iCloud Photos and Amazon Photos scans. Built with [Plasmo](https://plasmo.com/), [MediaPipe](https://developers.google.com/mediapipe), [React](https://react.dev/), and [MUI](https://mui.com/).
 
 ## Demo
 
@@ -22,12 +22,12 @@ Uses [Google Photos Toolkit (GPTK)](https://github.com/xob0t/Google-Photos-Toolk
 ## Usage
 
 1. Open Google Photos in Chrome with the extension installed
-2. Click the extension icon → **Open Deduper**
+2. Click the extension icon → **Open PhotoSweep**
 3. Start with a scoped scan: choose a small album, month, or year before scanning a large library
 4. Review each duplicate group, choose which item or items to keep, and skip any uncertain group
 5. Export the JSON or CSV review report before moving anything to Trash
 6. Click **Move to Trash**, read the confirmation, type the exact item count, and confirm
-7. Check the Trash result report, then restore from Google Photos Trash if anything looks wrong
+7. Check the Trash result report, then restore from provider Trash if anything looks wrong
 
 No OAuth setup. No Google Cloud project. No data leaves your browser.
 
@@ -39,7 +39,7 @@ No OAuth setup. No Google Cloud project. No data leaves your browser.
 - Local cache: embeddings and metadata snapshots stay in Chrome extension storage and can be cleared or rebuilt.
 - Explainable groups: exact and similar duplicate groups are separated, with similarity and match reasons shown in the review UI.
 - Audit exports: JSON and CSV reports include kept items, Trash candidates, reasons, timestamps, links, and storage metadata when available.
-- Conservative Trash: items are moved to Google Photos Trash in small batches with retry/backoff, typed count confirmation, result reporting, and an in-app undo path.
+- Conservative Trash: where supported, items are moved to provider Trash in small batches with retry/backoff, typed count confirmation, result reporting, and an in-app undo path.
 - Local-first packaging: image embeddings run in the browser using the bundled MediaPipe model and WASM assets; there is no photo-analysis backend.
 
 ## Recommended Large-Library Flow
@@ -50,7 +50,7 @@ For a library around 20k photos, avoid starting with an unscoped full-library co
 2. Review and Trash only obvious exact duplicates.
 3. Export and keep the pre-Trash report.
 4. Confirm that the Trash result report shows the expected moved items.
-5. Restore a test item from Google Photos Trash before using the workflow on larger batches.
+5. Restore a test item from Trash before using the workflow on larger batches.
 6. Re-run the same scope in balanced or broader settings only after the strict pass looks correct.
 7. Move to the next scoped period.
 

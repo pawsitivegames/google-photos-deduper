@@ -8,11 +8,12 @@
  * - Zoom button opens the photo viewer modal
  * - Zoom button does not trigger onToggleKept (stopPropagation)
  */
-import { createTheme, ThemeProvider } from "@mui/material/styles"
+import { ThemeProvider } from "@mui/material/styles"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { DuplicateGroups } from "../../components/DuplicateGroups"
+import theme from "../../lib/theme"
 import type { DuplicateGroup, GpdMediaItem } from "../../lib/types"
 
 // ============================================================
@@ -47,8 +48,6 @@ vi.mock("../../components/PhotoViewerModal", () => ({
 // ============================================================
 // Helpers
 // ============================================================
-
-const theme = createTheme()
 
 function wrap(ui: React.ReactElement) {
   return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>)
@@ -341,6 +340,16 @@ describe("DuplicateGroups — empty state", () => {
 // ============================================================
 
 describe("DuplicateGroups — virtualized rendering", () => {
+  it("renders compact mode directly to avoid nested side-panel scrolling", () => {
+    wrap(<DuplicateGroups {...defaultProps} compact />)
+
+    expect(
+      screen.queryByTestId("duplicate-groups-virtual-list")
+    ).not.toBeInTheDocument()
+    expect(screen.getByText("3 photos")).toBeInTheDocument()
+    expect(screen.getByTitle("img3.jpg")).toBeInTheDocument()
+  })
+
   it("does not mount every duplicate group in a large result set", () => {
     const largeMediaItems: Record<string, GpdMediaItem> = {}
     const largeGroups: DuplicateGroup[] = []

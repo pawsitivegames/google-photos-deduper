@@ -1,38 +1,64 @@
 import { createTheme } from "@mui/material/styles"
 
+export const photoSweepColors = {
+  canvasTop: "#F6FAF8",
+  canvasBottom: "#EDF6F3",
+  surface: "#FFFFFF",
+  surfaceSoft: "#F4F8F6",
+  surfaceTint: "rgba(255,255,255,0.9)",
+  border: "#D6E2DD",
+  borderStrong: "#B8CBC4",
+  ink: "#17201C",
+  muted: "#66736D",
+  primary: "#0B6E69",
+  primaryDark: "#084F4B",
+  primarySoft: "#E4F3F1",
+  primaryBorder: "#9ECBC6",
+  primaryShadow: "rgba(11, 110, 105, 0.18)",
+  success: "#248A4B",
+  successDark: "#176535",
+  successSoft: "#E5F4EA",
+  warning: "#B7791F",
+  warningSoft: "#FFF3D8",
+  error: "#E25148",
+  errorDark: "#B9362F",
+  errorSoft: "#FDEBE8",
+  shadow: "rgba(23, 32, 28, 0.09)"
+}
+
 const theme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#007AFF",
-      dark: "#005EC4",
-      light: "#EAF4FF",
+      main: photoSweepColors.primary,
+      dark: photoSweepColors.primaryDark,
+      light: photoSweepColors.primarySoft,
       contrastText: "#FFFFFF"
     },
     success: {
-      main: "#34C759",
-      light: "#E9FBEF",
-      dark: "#248A3D"
+      main: photoSweepColors.success,
+      light: photoSweepColors.successSoft,
+      dark: photoSweepColors.successDark
     },
     warning: {
-      main: "#FF9500",
-      light: "#FFF4E5",
-      dark: "#B86600"
+      main: photoSweepColors.warning,
+      light: photoSweepColors.warningSoft,
+      dark: "#8A5A14"
     },
     error: {
-      main: "#FF3B30",
-      light: "#FFECEC",
-      dark: "#C82018",
+      main: photoSweepColors.error,
+      light: photoSweepColors.errorSoft,
+      dark: photoSweepColors.errorDark,
       contrastText: "#FFFFFF"
     },
     background: {
-      default: "#F5F5F7",
-      paper: "rgba(255,255,255,0.86)"
+      default: photoSweepColors.canvasTop,
+      paper: photoSweepColors.surfaceTint
     },
-    divider: "#D2D2D7",
+    divider: photoSweepColors.border,
     text: {
-      primary: "#1D1D1F",
-      secondary: "#6E6E73"
+      primary: photoSweepColors.ink,
+      secondary: photoSweepColors.muted
     }
   },
   typography: {
@@ -57,6 +83,9 @@ const theme = createTheme({
     button: {
       fontWeight: 700,
       letterSpacing: 0
+    },
+    caption: {
+      letterSpacing: 0
     }
   },
   shape: {
@@ -66,9 +95,9 @@ const theme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: "rgba(245,245,247,0.78)",
-          color: "#1D1D1F",
-          boxShadow: "0 1px 0 rgba(0, 0, 0, 0.08)",
+          backgroundColor: "rgba(246,250,248,0.82)",
+          color: photoSweepColors.ink,
+          boxShadow: `0 1px 0 ${photoSweepColors.shadow}`,
           backdropFilter: "saturate(180%) blur(22px)"
         }
       }
@@ -84,7 +113,15 @@ const theme = createTheme({
           fontWeight: 600,
           boxShadow: "none",
           minHeight: 36,
-          letterSpacing: 0
+          letterSpacing: 0,
+          transition:
+            "background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease",
+          "&:hover": {
+            transform: "translateY(-1px)"
+          },
+          "&:active": {
+            transform: "translateY(0)"
+          }
         }
       }
     },
@@ -108,10 +145,14 @@ const theme = createTheme({
         root: {
           textTransform: "none",
           fontWeight: 600,
-          borderColor: "#D2D2D7",
+          borderRadius: 8,
+          borderColor: photoSweepColors.border,
+          transition:
+            "background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease",
           "&.Mui-selected": {
-            color: "#007AFF",
-            backgroundColor: "#EAF4FF"
+            color: photoSweepColors.primary,
+            backgroundColor: photoSweepColors.primarySoft,
+            borderColor: photoSweepColors.primaryBorder
           }
         }
       }
@@ -126,7 +167,7 @@ const theme = createTheme({
         root: {
           borderRadius: 999,
           height: 7,
-          backgroundColor: "#E5E5EA"
+          backgroundColor: "#E2EBE7"
         }
       }
     }

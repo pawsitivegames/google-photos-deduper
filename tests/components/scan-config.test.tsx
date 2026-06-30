@@ -5,19 +5,18 @@
  * the time-window ToggleButtonGroup, which is only shown in smart mode and
  * drives `onSettingsChange({ smartWindowSec })`.
  */
-import { createTheme, ThemeProvider } from "@mui/material/styles"
+import { ThemeProvider } from "@mui/material/styles"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { ScanConfig } from "../../components/ScanConfig"
 import { createScanCheckpoint } from "../../lib/scan-checkpoint"
+import theme from "../../lib/theme"
 import type { ScanSettings } from "../../lib/types"
 
 // ============================================================
 // Helpers
 // ============================================================
-
-const theme = createTheme()
 
 function renderConfig(
   settings: Partial<ScanSettings> = {},
@@ -212,9 +211,14 @@ describe("ScanConfig — similarity threshold guidance", () => {
     fireEvent.click(screen.getByRole("button", { name: /More options/i }))
 
     expect(
-      screen.getByText(/Lower values catch more reuploads and edited copies/i)
+      screen.getByText(
+        /Lower values catch more reuploads, screenshots, and edited copies/i
+      )
     ).toBeInTheDocument()
-    expect(screen.getByText(/Stricter/i)).toBeInTheDocument()
+    expect(screen.getByText(/Loose/i)).toBeInTheDocument()
+    expect(screen.getByText(/Balanced/i)).toBeInTheDocument()
+    expect(screen.getByText(/Near exact/i)).toBeInTheDocument()
+    expect(screen.getByText("Exact")).toBeInTheDocument()
   })
 })
 
@@ -283,20 +287,47 @@ describe("ScanConfig — photo source", () => {
     expect(screen.getByText(/iCloud test batch size/i)).toBeInTheDocument()
   })
 
-  it("keeps compact iCloud scope focused on scan controls when connected", () => {
-    renderConfig({ sourceProvider: "icloud" }, { compact: true, hasGptk: false })
+  it("uses the same compact scope visual pattern for non-Google providers", () => {
+    renderConfig(
+      { sourceProvider: "icloud" },
+      { compact: true, hasGptk: false }
+    )
 
+    expect(screen.getByLabelText(/Library area/i)).toHaveValue(
+      "iCloud Photos library"
+    )
     expect(
       screen.getByRole("button", { name: /Check entire library/i })
     ).toBeInTheDocument()
-    expect(screen.getByText(/Leave iCloud Photos open/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Reads the connected iCloud Photos tab/i)
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Choose photo source/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Leave iCloud Photos open/i)
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: /Retry connection/i })
     ).not.toBeInTheDocument()
     expect(
       screen.queryByText(/iCloud Photos is not connected/i)
     ).not.toBeInTheDocument()
+
+    cleanup()
+    renderConfig(
+      { sourceProvider: "amazon" },
+      { compact: true, hasGptk: false }
+    )
+
+    expect(screen.getByLabelText(/Library area/i)).toHaveValue(
+      "Amazon Photos library"
+    )
+    expect(
+      screen.getByText(/Reads the connected Amazon Photos tab/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Check entire library/i })
+    ).toBeInTheDocument()
   })
 
   it("labels iCloud capped scans as test batches", () => {

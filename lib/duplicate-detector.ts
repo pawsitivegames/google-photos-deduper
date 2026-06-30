@@ -90,9 +90,10 @@ export interface ScanTiming {
 type ProgressCallback = (progress: DetectionProgress) => void
 type DuplicateGroupsCallback = (groups: DuplicateGroup[]) => void
 
-const VIDEO_VISUAL_THRESHOLD_FLOOR = 0.88
-const VIDEO_VISUAL_THRESHOLD_DELTA = 0.06
+const VIDEO_VISUAL_THRESHOLD_FLOOR = 0.8
+const VIDEO_VISUAL_THRESHOLD_DELTA = 0.04
 const VIDEO_DURATION_TOLERANCE_MS = 1000
+const NEAR_EXACT_VISUAL_THRESHOLD = 0.99
 
 function sortGroupItems(items: GpdMediaItem[]): GpdMediaItem[] {
   return [...items].sort(
@@ -150,6 +151,14 @@ function haveCloseVideoDuration(a: GpdMediaItem, b: GpdMediaItem): boolean {
   )
 }
 
+function videoPosterThreshold(threshold: number): number {
+  if (threshold >= NEAR_EXACT_VISUAL_THRESHOLD) return threshold
+  return Math.max(
+    VIDEO_VISUAL_THRESHOLD_FLOOR,
+    threshold - VIDEO_VISUAL_THRESHOLD_DELTA
+  )
+}
+
 export function findDedupKeyDuplicateGroups(
   items: GpdMediaItem[]
 ): GpdMediaItem[][] {
@@ -195,10 +204,7 @@ export function findVideoPosterDuplicateGroups(
 
   if (videoRows.length < 2) return []
 
-  const relaxedThreshold = Math.max(
-    VIDEO_VISUAL_THRESHOLD_FLOOR,
-    threshold - VIDEO_VISUAL_THRESHOLD_DELTA
-  )
+  const relaxedThreshold = videoPosterThreshold(threshold)
   const parent = videoRows.map((_, index) => index)
   const find = (index: number): number =>
     parent[index] === index ? index : (parent[index] = find(parent[index]))
@@ -610,11 +616,7 @@ export function groupByProviderSequence(
       (a, b) => (a.sequenceIndex ?? 0) - (b.sequenceIndex ?? 0)
     )
     for (let i = 0; i < sorted.length; i++) {
-      for (
-        let j = i + 1;
-        j < sorted.length && j <= i + neighborRadius;
-        j++
-      ) {
+      for (let j = i + 1; j < sorted.length && j <= i + neighborRadius; j++) {
         if (
           Number.isFinite(maxTimestampDistanceMs) &&
           maxTimestampDistanceMs > 0 &&
@@ -810,9 +812,15 @@ export async function smartDetectDuplicates(
   console.log(
     `[GPD] smartDetectDuplicates: ${mediaItems.length} items → ${candidates.length} candidates → ${timestampBuckets.length} timestamp buckets, ${sequenceBuckets.length} sequence pairs`
   )
-  const subset = smartScanEmbeddingCandidates(candidates, embeddingCandidateBuckets)
+  const subset = smartScanEmbeddingCandidates(
+    candidates,
+    embeddingCandidateBuckets
+  )
 
-  if (embeddingCandidateBuckets.length === 0 && exactMetadataGroups.length > 0) {
+  if (
+    embeddingCandidateBuckets.length === 0 &&
+    exactMetadataGroups.length > 0
+  ) {
     return exactMetadataGroups.map((items, i) =>
       buildDuplicateGroup(items, i, threshold)
     )

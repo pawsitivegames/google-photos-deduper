@@ -7,13 +7,12 @@
  * - "Move to Trash" button disabled when duplicateCount === 0
  * - All callback props fire on the correct user action
  */
-import { createTheme, ThemeProvider } from "@mui/material/styles"
+import { ThemeProvider } from "@mui/material/styles"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { ActionBar } from "../../components/ActionBar"
-
-const theme = createTheme()
+import theme from "../../lib/theme"
 
 interface Props {
   totalItems?: number
@@ -31,6 +30,7 @@ interface Props {
   onExportJson?: () => void
   onExportCsv?: () => void
   onApplyKeepStrategy?: (strategy: string) => void
+  compact?: boolean
 }
 
 function renderActionBar(props: Props = {}) {
@@ -239,6 +239,22 @@ describe("ActionBar", () => {
       expect(callbacks.onApplyKeepStrategy).toHaveBeenCalledWith(
         "non_storage_counting"
       )
+    })
+
+    it("keeps compact toolbar actions accessible by name", () => {
+      const { callbacks } = renderActionBar({ compact: true })
+
+      fireEvent.click(screen.getByRole("button", { name: /Scan again/i }))
+      fireEvent.click(screen.getByRole("button", { name: /^Export report$/i }))
+      fireEvent.click(screen.getByRole("button", { name: /^Spreadsheet$/i }))
+      fireEvent.click(screen.getByRole("button", { name: /^Include all$/i }))
+      fireEvent.click(screen.getByRole("button", { name: /^Skip all$/i }))
+
+      expect(callbacks.onRescan).toHaveBeenCalledOnce()
+      expect(callbacks.onExportJson).toHaveBeenCalledOnce()
+      expect(callbacks.onExportCsv).toHaveBeenCalledOnce()
+      expect(callbacks.onSelectAll).toHaveBeenCalledOnce()
+      expect(callbacks.onDeselectAll).toHaveBeenCalledOnce()
     })
 
     it("does not call onTrash when button is disabled", () => {

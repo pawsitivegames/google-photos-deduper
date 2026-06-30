@@ -1,4 +1,4 @@
-// App state machine for Google Photos Deduper.
+// App state machine for PhotoSweep.
 // Extracted from tabs/app.tsx so it can be unit-tested independently.
 
 import { areScanResultsValid } from "./scan-results"

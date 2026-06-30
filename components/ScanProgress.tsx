@@ -10,6 +10,7 @@ import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
 import { useEffect, useRef, useState } from "react"
 
+import { photoSweepColors } from "../lib/theme"
 import type { ScanPhase } from "../lib/types"
 
 interface ScanProgressProps {
@@ -123,11 +124,11 @@ export function ScanProgress({
         sx={{
           p: { xs: 2.5, md: 4 },
           border: "1px solid",
-          borderColor: "divider",
+          borderColor: "rgba(214,226,221,0.9)",
           borderRadius: 3,
-          bgcolor: "rgba(255,255,255,0.78)",
+          bgcolor: photoSweepColors.surfaceTint,
           backdropFilter: "saturate(180%) blur(22px)",
-          boxShadow: "0 24px 70px rgba(0, 0, 0, 0.08)"
+          boxShadow: `0 24px 70px ${photoSweepColors.shadow}`
         }}>
         <Typography variant="h5" gutterBottom>
           Finding Duplicates
@@ -163,7 +164,10 @@ export function ScanProgress({
                     border: "1px solid",
                     borderColor: active ? "primary.main" : "divider",
                     borderRadius: 2,
-                    bgcolor: active ? "primary.light" : "background.paper",
+                    bgcolor: active ? "primary.light" : photoSweepColors.surface,
+                    boxShadow: active
+                      ? `0 10px 24px ${photoSweepColors.primaryShadow}`
+                      : "none",
                     display: "flex",
                     alignItems: "center",
                     gap: 1

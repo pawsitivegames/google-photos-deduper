@@ -1,5 +1,5 @@
-import type { GpdMediaItem, ScanPhase, ScanSettings } from "./types"
 import { areScanResultsValid } from "./scan-results"
+import type { GpdMediaItem, ScanPhase, ScanSettings } from "./types"
 
 export const SCAN_CHECKPOINT_KEY = "scanCheckpoint"
 export const MAX_CHECKPOINT_MEDIA_ITEMS = 5000
@@ -75,7 +75,10 @@ export function shouldOfferResume(
   if (checkpoint?.status !== "interrupted" && checkpoint?.status !== "error") {
     return false
   }
-  return !checkpoint.settings.amazonBatchLimit && !checkpoint.settings.icloudBatchLimit
+  return (
+    !checkpoint.settings.amazonBatchLimit &&
+    !checkpoint.settings.icloudBatchLimit
+  )
 }
 
 export function summarizeScanCheckpoint(checkpoint: ScanCheckpoint): string {
@@ -105,10 +108,19 @@ export function describeScanCheckpointResume(
 
 export function canResumeScanCheckpoint(
   checkpoint: ScanCheckpoint,
-  context: { accountEmail?: string }
+  context: {
+    accountEmail?: string
+    sourceProvider?: ScanSettings["sourceProvider"]
+  }
 ): boolean {
   return areScanResultsValid(
-    { accountEmail: checkpoint.accountEmail },
-    { accountEmail: context.accountEmail }
+    {
+      accountEmail: checkpoint.accountEmail,
+      sourceProvider: checkpoint.settings.sourceProvider
+    },
+    {
+      accountEmail: context.accountEmail,
+      sourceProvider: context.sourceProvider
+    }
   )
 }

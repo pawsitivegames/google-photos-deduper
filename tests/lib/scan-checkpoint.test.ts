@@ -162,4 +162,23 @@ describe("scan checkpoint", () => {
       })
     ).toBe(false)
   })
+
+  it("does not resume checkpoints from another photo provider", () => {
+    const checkpoint = createScanCheckpoint({
+      id: "req-1",
+      settings: {
+        sourceProvider: "icloud",
+        scanMode: "full",
+        similarityThreshold: 0.95
+      }
+    })
+
+    expect(
+      canResumeScanCheckpoint(checkpoint, { sourceProvider: "icloud" })
+    ).toBe(true)
+    expect(
+      canResumeScanCheckpoint(checkpoint, { sourceProvider: "google" })
+    ).toBe(false)
+    expect(canResumeScanCheckpoint(checkpoint, {})).toBe(false)
+  })
 })

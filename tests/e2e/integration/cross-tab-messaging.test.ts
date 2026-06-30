@@ -52,6 +52,10 @@ async function sendAppMessage(
   }, message)
 }
 
+function scanLibraryButton(page: Page) {
+  return page.getByRole("button", { name: /Check entire library/i })
+}
+
 // ============================================================
 // healthCheck flow
 // ============================================================
@@ -65,9 +69,7 @@ test.describe("healthCheck", () => {
     const page = await openAppTab(context, extensionId)
 
     // The app tab fires healthCheck on mount — wait for connected state
-    await expect(
-      page.getByRole("button", { name: /Scan Library/i })
-    ).toBeVisible({ timeout: 10_000 })
+    await expect(scanLibraryButton(page)).toBeVisible({ timeout: 10_000 })
 
     await stub.close()
     await page.close()
@@ -101,9 +103,7 @@ test.describe("healthCheck", () => {
     const page = await openAppTab(context, extensionId)
 
     // Connected state means the healthCheck round-trip succeeded
-    await expect(
-      page.getByRole("button", { name: /Scan Library/i })
-    ).toBeVisible({ timeout: 10_000 })
+    await expect(scanLibraryButton(page)).toBeVisible({ timeout: 10_000 })
 
     await stub.close()
     await page.close()
@@ -122,9 +122,7 @@ test.describe("tab lifecycle", () => {
     const page = await openAppTab(context, extensionId)
 
     // Wait for connected state
-    await expect(
-      page.getByRole("button", { name: /Scan Library/i })
-    ).toBeVisible({ timeout: 10_000 })
+    await expect(scanLibraryButton(page)).toBeVisible({ timeout: 10_000 })
 
     // Close the GP stub tab
     await stub.close()
@@ -150,9 +148,7 @@ test.describe("gptkCommand routing", () => {
     const page = await openAppTab(context, extensionId)
 
     // Wait for connected state (proves the tab mapping is established)
-    await expect(
-      page.getByRole("button", { name: /Scan Library/i })
-    ).toBeVisible({ timeout: 10_000 })
+    await expect(scanLibraryButton(page)).toBeVisible({ timeout: 10_000 })
 
     // Send a gptkCommand from the app tab and capture the result via a listener
     const result = await page.evaluate(() => {
@@ -255,9 +251,7 @@ test.describe("progress streaming", () => {
     const stub = await openGptkStubPage(context)
     const page = await openAppTab(context, extensionId)
 
-    await expect(
-      page.getByRole("button", { name: /Scan Library/i })
-    ).toBeVisible({ timeout: 10_000 })
+    await expect(scanLibraryButton(page)).toBeVisible({ timeout: 10_000 })
 
     // Trigger a trashItems command with 60 items (2 batches of 25 + 10)
     // The stub emits progress after each batch, so we expect at least one progress event.

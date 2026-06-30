@@ -25,6 +25,7 @@ import {
   describeScanCheckpointResume,
   summarizeScanCheckpoint
 } from "../lib/scan-checkpoint"
+import { photoSweepColors } from "../lib/theme"
 import type { GpdAlbum, PhotoProvider, ScanSettings } from "../lib/types"
 
 function formatWindow(sec: number): string {
@@ -61,6 +62,18 @@ function providerHelpText(provider: ScanSettings["sourceProvider"]): string {
     return "Scan Amazon Photos through the signed-in Canada web session. Confirmed trash actions move selected duplicates to Amazon Photos trash."
   }
   return "Best for full duplicate cleanup. You can scan the whole timeline, an album, or a date range, then move duplicates to Google Photos trash."
+}
+
+function compactScopeLabel(provider: ScanSettings["sourceProvider"]): string {
+  if (provider === "icloud") return "iCloud Photos library"
+  if (provider === "amazon") return "Amazon Photos library"
+  return "Entire library timeline"
+}
+
+function compactScopeHelp(provider: ScanSettings["sourceProvider"]): string {
+  if (provider === "icloud") return "Reads the connected iCloud Photos tab."
+  if (provider === "amazon") return "Reads the connected Amazon Photos tab."
+  return "Choose an album or scan the full timeline."
 }
 
 function providerBatchLimit(settings: ScanSettings): number | undefined {
@@ -124,6 +137,7 @@ export function ScanConfig({
   const isAmazon = sourceProvider === "amazon"
   const supportsAlbumScope = sourceProvider === "google"
   const batchLimit = providerBatchLimit(settings)
+  const libraryAreaValueLabel = albumLabel || compactScopeLabel(sourceProvider)
   const hasScanScope = Boolean(
     settings.albumScope || settings.dateRange?.from || settings.dateRange?.to
   )
@@ -157,19 +171,36 @@ export function ScanConfig({
     <Box
       sx={{
         maxWidth: compact ? "100%" : 900,
+        minWidth: 0,
+        width: "100%",
+        boxSizing: "border-box",
+        overflow: compact ? "hidden" : "visible",
         mx: "auto",
-        py: compact ? 0 : { xs: 2, md: 6 }
+        py: compact ? 0 : { xs: 2, md: 6 },
+        ...(compact
+          ? {
+              "&, & *": {
+                boxSizing: "border-box"
+              }
+            }
+          : {})
       }}>
       <Paper
         elevation={0}
         sx={{
           p: compact ? 0 : { xs: 2.5, md: 4 },
+          minWidth: 0,
+          maxWidth: "100%",
+          width: "100%",
+          boxSizing: "border-box",
           border: "1px solid",
-          borderColor: compact ? "transparent" : "divider",
+          borderColor: compact ? "transparent" : "rgba(214,226,221,0.9)",
           borderRadius: compact ? 2 : 3,
-          bgcolor: compact ? "transparent" : "rgba(255,255,255,0.78)",
+          bgcolor: compact ? "transparent" : photoSweepColors.surfaceTint,
           backdropFilter: compact ? "none" : "saturate(180%) blur(22px)",
-          boxShadow: compact ? "none" : "0 24px 70px rgba(0, 0, 0, 0.08)"
+          boxShadow: compact
+            ? "none"
+            : `0 24px 70px ${photoSweepColors.shadow}`
         }}>
         {!compact && (
           <Box
@@ -185,11 +216,12 @@ export function ScanConfig({
                 width: 56,
                 height: 56,
                 borderRadius: 3,
-                bgcolor: "primary.light",
+                background: `linear-gradient(135deg, ${photoSweepColors.primarySoft} 0%, ${photoSweepColors.successSoft} 100%)`,
                 color: "primary.main",
                 display: "grid",
                 placeItems: "center",
-                flexShrink: 0
+                flexShrink: 0,
+                boxShadow: `inset 0 0 0 1px ${photoSweepColors.primaryShadow}`
               }}>
               <PhotoLibraryRoundedIcon />
             </Box>
@@ -241,7 +273,8 @@ export function ScanConfig({
               p: 2,
               mb: 2,
               borderRadius: 2,
-              bgcolor: "rgba(255,255,255,0.64)"
+              borderColor: "rgba(214,226,221,0.86)",
+              bgcolor: photoSweepColors.surfaceSoft
             }}>
             <Stack
               direction="column"
@@ -299,10 +332,14 @@ export function ScanConfig({
           variant="outlined"
           sx={{
             p: compact ? 0 : 2,
-            mb: compact ? 1 : 2,
-            borderRadius: 2,
-            borderColor: compact ? "transparent" : "divider",
-            bgcolor: compact ? "transparent" : "rgba(255,255,255,0.64)"
+            mb: compact ? 0.75 : 2,
+            minWidth: 0,
+            maxWidth: "100%",
+            width: "100%",
+            boxSizing: "border-box",
+            borderRadius: compact ? 1.5 : 2,
+            borderColor: compact ? "transparent" : "rgba(214,226,221,0.86)",
+            bgcolor: compact ? "transparent" : photoSweepColors.surfaceSoft
           }}>
           {!compact && (
             <>
@@ -314,7 +351,126 @@ export function ScanConfig({
               </Typography>
             </>
           )}
-          {supportsAlbumScope ? (
+          {compact ? (
+            <>
+              <TextField
+                select={supportsAlbumScope}
+                label="Library area"
+                size="small"
+                fullWidth
+                value={
+                  supportsAlbumScope
+                    ? settings.albumScope?.mediaKey ?? ""
+                    : compactScopeLabel(sourceProvider)
+                }
+                InputLabelProps={{ shrink: true }}
+                SelectProps={
+                  supportsAlbumScope
+                    ? {
+                        displayEmpty: true,
+                        renderValue: (value) =>
+                          value
+                            ? libraryAreaValueLabel
+                            : compactScopeLabel(sourceProvider)
+                      }
+                    : undefined
+                }
+                InputProps={supportsAlbumScope ? undefined : { readOnly: true }}
+                helperText={undefined}
+                sx={{
+                  "& .MuiInputBase-root": {
+                    minHeight: 42,
+                    borderRadius: 1.5
+                  },
+                  "& .MuiSelect-select, & .MuiInputBase-input": {
+                    py: 1.15,
+                    fontSize: 14.5,
+                    lineHeight: 1.2
+                  },
+                  "& .MuiFormLabel-root": {
+                    fontSize: 12,
+                    fontWeight: 700
+                  },
+                  "& .MuiFormHelperText-root": {
+                    display: "none"
+                  }
+                }}
+                onChange={(event) => {
+                  if (!supportsAlbumScope) return
+                  const mediaKey = event.target.value
+                  if (!mediaKey) {
+                    onSettingsChange({ albumScope: undefined })
+                    return
+                  }
+                  const album = albums.find((a) => a.mediaKey === mediaKey)
+                  onSettingsChange({
+                    albumScope: {
+                      mediaKey,
+                      title: album?.title,
+                      itemCount: album?.itemCount,
+                      isShared: album?.isShared
+                    }
+                  })
+                }}>
+                {supportsAlbumScope && (
+                  <MenuItem value="">Entire library timeline</MenuItem>
+                )}
+                {supportsAlbumScope &&
+                  albums.map((album) => (
+                    <MenuItem key={album.mediaKey} value={album.mediaKey}>
+                      {album.title}
+                      {album.itemCount !== undefined
+                        ? ` (${album.itemCount.toLocaleString()})`
+                        : ""}
+                      {album.isShared ? " - shared" : ""}
+                    </MenuItem>
+                  ))}
+              </TextField>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  mt: 0.7,
+                  gap: 1,
+                  minWidth: 0
+                }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  noWrap
+                  sx={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                  }}>
+                  {supportsAlbumScope
+                    ? albumsLoading
+                      ? "Loading albums..."
+                      : albumsError
+                        ? albumsError
+                        : compactScopeHelp(sourceProvider)
+                    : compactScopeHelp(sourceProvider)}
+                </Typography>
+                {supportsAlbumScope && onRefreshAlbums && (
+                  <Button
+                    size="small"
+                    disabled={albumsLoading}
+                    onClick={onRefreshAlbums}
+                    sx={{
+                      minHeight: 26,
+                      minWidth: 0,
+                      px: 0.5,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      whiteSpace: "nowrap"
+                    }}>
+                    Refresh
+                  </Button>
+                )}
+              </Box>
+            </>
+          ) : supportsAlbumScope ? (
             <>
               <TextField
                 select
@@ -322,10 +478,44 @@ export function ScanConfig({
                 size="small"
                 fullWidth
                 value={settings.albumScope?.mediaKey ?? ""}
+                InputLabelProps={{ shrink: true }}
+                SelectProps={{
+                  displayEmpty: true,
+                  renderValue: (value) =>
+                    value ? libraryAreaValueLabel : "Entire library timeline"
+                }}
                 helperText={
-                  albumLabel
-                    ? `Only checking ${albumLabel}.`
-                    : "Check your full Google Photos timeline, or narrow this to one album."
+                  compact
+                    ? undefined
+                    : albumLabel
+                      ? `Only checking ${albumLabel}.`
+                      : "Check your full Google Photos timeline, or narrow this to one album."
+                }
+                sx={
+                  compact
+                    ? {
+                        "& .MuiInputBase-root": {
+                          minHeight: 42,
+                          borderRadius: 1.5
+                        },
+                        "& .MuiSelect-select": {
+                          py: 1.15,
+                          fontSize: 14.5,
+                          lineHeight: 1.2
+                        },
+                        "& .MuiFormLabel-root": {
+                          fontSize: 12,
+                          fontWeight: 700
+                        },
+                        "& .MuiFormHelperText-root": {
+                          display: "none",
+                          mx: 0,
+                          mt: 0.7,
+                          fontSize: 12,
+                          lineHeight: 1.35
+                        }
+                      }
+                    : undefined
                 }
                 onChange={(event) => {
                   const mediaKey = event.target.value
@@ -359,23 +549,39 @@ export function ScanConfig({
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  mt: 1,
-                  gap: 1
+                  mt: compact ? 0.75 : 1,
+                  gap: 1,
+                  minWidth: 0
                 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {albumsLoading
-                    ? "Loading albums..."
-                    : albumsError
-                      ? albumsError
-                      : `${albums.length.toLocaleString()} album${
-                          albums.length !== 1 ? "s" : ""
-                        } available.`}
-                </Typography>
+                {!compact && (
+                  <Typography variant="caption" color="text.secondary">
+                    {albumsLoading
+                      ? "Loading albums..."
+                      : albumsError
+                        ? albumsError
+                        : `${albums.length.toLocaleString()} album${
+                            albums.length !== 1 ? "s" : ""
+                          } available.`}
+                  </Typography>
+                )}
                 {onRefreshAlbums && (
                   <Button
                     size="small"
                     disabled={albumsLoading}
-                    onClick={onRefreshAlbums}>
+                    onClick={onRefreshAlbums}
+                    sx={
+                      compact
+                        ? {
+                            ml: "auto",
+                            minHeight: 26,
+                            minWidth: 0,
+                            px: 0.5,
+                            fontSize: 12,
+                            fontWeight: 800,
+                            whiteSpace: "nowrap"
+                          }
+                        : undefined
+                    }>
                     Refresh albums
                   </Button>
                 )}
@@ -435,7 +641,16 @@ export function ScanConfig({
           sx={{
             mb: compact ? 1 : 2,
             minHeight: compact ? 42 : undefined,
-            borderRadius: 2
+            borderRadius: compact ? 1.5 : 2,
+            fontSize: compact ? 14 : undefined,
+            boxShadow: compact
+              ? `0 4px 12px ${photoSweepColors.primaryShadow}`
+              : `0 12px 26px ${photoSweepColors.primaryShadow}`,
+            "&:hover": {
+              boxShadow: compact
+                ? `0 6px 16px ${photoSweepColors.primaryShadow}`
+                : `0 16px 34px ${photoSweepColors.primaryShadow}`
+            }
           }}>
           {settings.albumScope && supportsAlbumScope
             ? "Check this album"
@@ -447,7 +662,25 @@ export function ScanConfig({
         </Button>
 
         {showUnscopedFullScanWarning && compact && (
-          <Alert severity="warning" sx={{ mb: 1 }}>
+          <Alert
+            severity="warning"
+            sx={{
+              mb: 1,
+              py: 0.7,
+              px: 1,
+              borderRadius: 1.5,
+              alignItems: "flex-start",
+              fontSize: 13,
+              "& .MuiAlert-message": {
+                minWidth: 0,
+                py: 0,
+                overflowWrap: "anywhere"
+              },
+              "& .MuiAlert-icon": {
+                mr: 0.75,
+                py: 0.1
+              }
+            }}>
             Full-library scans can be slow on large libraries. Use albums or
             dates to narrow the first pass.
           </Alert>
@@ -458,23 +691,41 @@ export function ScanConfig({
           elevation={0}
           sx={{
             border: "1px solid",
-            borderColor: "divider",
-            borderRadius: 2,
-            bgcolor: "rgba(255,255,255,0.58)",
+            borderColor: "rgba(214,226,221,0.86)",
+            borderRadius: compact ? 1.5 : 2,
+            bgcolor: compact ? "rgba(255,255,255,0.82)" : photoSweepColors.surface,
+            width: "100%",
+            maxWidth: "100%",
+            boxSizing: "border-box",
+            overflow: "hidden",
             "&:before": { display: "none" }
           }}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            sx={
+              compact
+                ? {
+                    minHeight: 38,
+                    px: 1,
+                    "&.Mui-expanded": { minHeight: 38 },
+                    "& .MuiAccordionSummary-content": {
+                      my: 0.75,
+                      "&.Mui-expanded": { my: 0.75 }
+                    }
+                  }
+                : undefined
+            }>
             <Typography
               variant="body2"
               fontWeight={compact ? 700 : undefined}
               color={compact ? "text.primary" : "text.secondary"}>
-              {compact ? "Scan options" : "More options"}
+              {compact ? "Advanced" : "More options"}
             </Typography>
           </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ mb: 3 }}>
+          <AccordionDetails sx={compact ? { px: 1, pt: 0, pb: 1 } : undefined}>
+            <Box sx={{ mb: compact ? 1.75 : 3 }}>
               <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
-                How broad should the search be?
+                Search breadth
               </Typography>
               <ToggleButtonGroup
                 value={settings.scanMode}
@@ -487,14 +738,16 @@ export function ScanConfig({
                 <ToggleButton value="smart">Smart</ToggleButton>
                 <ToggleButton value="full">Full</ToggleButton>
               </ToggleButtonGroup>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mt: 0.5 }}>
-                {settings.scanMode === "smart"
-                  ? "Fast: compares photos and videos taken around the same time."
-                  : `Compares all photos against each other in ${FULL_SCAN_BLOCK_SIZE.toLocaleString()}-item blocks.`}
-              </Typography>
+              {!compact && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block", mt: 0.5 }}>
+                  {settings.scanMode === "smart"
+                    ? "Fast: compares photos and videos taken around the same time."
+                    : `Compares all photos against each other in ${FULL_SCAN_BLOCK_SIZE.toLocaleString()}-item blocks.`}
+                </Typography>
+              )}
             </Box>
 
             {settings.scanMode === "smart" && (
@@ -582,11 +835,13 @@ export function ScanConfig({
               </Box>
             )}
 
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: compact ? 1.75 : 3 }}>
               <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
-                Optional taken-date range
+                Date range
               </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              <Stack
+                direction={compact ? "row" : { xs: "column", sm: "row" }}
+                spacing={1}>
                 <TextField
                   label="From"
                   type="date"
@@ -626,9 +881,11 @@ export function ScanConfig({
                   justifyContent: "space-between",
                   mt: 1
                 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Leave blank to check every taken date.
-                </Typography>
+                {!compact && (
+                  <Typography variant="caption" color="text.secondary">
+                    Leave blank to check every taken date.
+                  </Typography>
+                )}
                 {(settings.dateRange?.from || settings.dateRange?.to) && (
                   <Button
                     size="small"
@@ -641,84 +898,98 @@ export function ScanConfig({
 
             <Box>
               <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
-                Match sensitivity:{" "}
-                <strong>{settings.similarityThreshold}</strong>
+                Sensitivity: <strong>{settings.similarityThreshold}</strong>
               </Typography>
               <Slider
-                min={0.9}
+                min={0.8}
                 max={1.0}
                 step={0.01}
                 value={settings.similarityThreshold}
                 valueLabelDisplay="auto"
+                marks={
+                  compact
+                    ? false
+                    : [
+                        { value: 0.8, label: "Loose" },
+                        { value: 0.95, label: "Balanced" },
+                        { value: 0.99, label: "Near exact" }
+                      ]
+                }
                 onChange={(_, value) =>
                   onSettingsChange({ similarityThreshold: value as number })
                 }
               />
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  mt: 0.5
-                }}>
-                <Typography variant="caption" color="text.secondary">
-                  More matches
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Stricter
-                </Typography>
-              </Box>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mt: 1 }}>
-                Lower values catch more reuploads and edited copies. Review
-                similar sets before trashing.
-              </Typography>
+              {!compact && (
+                <>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mt: 0.5
+                    }}>
+                    <Typography variant="caption" color="text.secondary">
+                      More matches
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Exact
+                    </Typography>
+                  </Box>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "block", mt: 1 }}>
+                    Lower values catch more reuploads, screenshots, and edited
+                    copies. Exact/hash matches are always included.
+                  </Typography>
+                </>
+              )}
             </Box>
 
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
-                Embedding cache
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mb: 1 }}>
-                {cacheEntryCount === null
-                  ? "Cache size unavailable."
-                  : `${cacheEntryCount.toLocaleString()} cached embedding${
-                      cacheEntryCount !== 1 ? "s" : ""
-                    }.`}
-              </Typography>
-              {cacheStatus && (
-                <Alert severity="info" sx={{ mb: 1 }}>
-                  {cacheStatus}
-                </Alert>
-              )}
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={cacheBusy}
-                  onClick={onClearCache}>
-                  Clear Cache
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={cacheBusy || dateRangeInvalid}
-                  onClick={onRebuildCache}>
-                  Rebuild Cache
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={cacheBusy || cacheEntryCount === 0}
-                  onClick={onExportCacheDiagnostics}>
-                  Export Diagnostics
-                </Button>
-              </Stack>
-            </Box>
+            {!compact && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
+                  Embedding cache
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block", mb: 1 }}>
+                  {cacheEntryCount === null
+                    ? "Cache size unavailable."
+                    : `${cacheEntryCount.toLocaleString()} cached embedding${
+                        cacheEntryCount !== 1 ? "s" : ""
+                      }.`}
+                </Typography>
+                {cacheStatus && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    {cacheStatus}
+                  </Alert>
+                )}
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={cacheBusy}
+                    onClick={onClearCache}>
+                    Clear Cache
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={cacheBusy || dateRangeInvalid}
+                    onClick={onRebuildCache}>
+                    Rebuild Cache
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={cacheBusy || cacheEntryCount === 0}
+                    onClick={onExportCacheDiagnostics}>
+                    Export Diagnostics
+                  </Button>
+                </Stack>
+              </Box>
+            )}
           </AccordionDetails>
         </Accordion>
       </Paper>
