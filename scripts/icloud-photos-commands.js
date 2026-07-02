@@ -16,7 +16,7 @@ function postResult(command, requestId, data) {
   )
 }
 
-function postError(command, requestId, error) {
+function postError(command, requestId, error, data) {
   window.postMessage(
     {
       app: GPD_APP_ID,
@@ -24,20 +24,23 @@ function postError(command, requestId, error) {
       command,
       requestId,
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      ...(data !== undefined ? { data } : {})
     },
     "*"
   )
 }
 
-function postProgress(requestId, itemsProcessed, message) {
+function postProgress(requestId, itemsProcessed, message, command, data) {
   window.postMessage(
     {
       app: GPD_APP_ID,
       action: "gptkProgress",
       requestId,
       itemsProcessed,
-      message
+      message,
+      ...(command !== undefined ? { command } : {}),
+      ...(data !== undefined ? { data } : {})
     },
     "*"
   )
@@ -121,6 +124,98 @@ function cloudKitQueryUrl() {
 
 function cloudKitBatchUrl(queryUrl) {
   return queryUrl.replace("/records/query?", "/internal/records/query/batch?")
+}
+
+function cloudKitModifyUrl(queryUrl) {
+  return queryUrl.replace("/records/query?", "/records/modify?")
+}
+
+const ICLOUD_MODIFY_BATCH_SIZE = 50
+
+function chunkArray(items, size) {
+  const chunks = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
+function cloudKitErrorMessage(entity) {
+  return (
+    entity?.errorMessage ||
+    entity?.reason ||
+    entity?.serverErrorCode ||
+    entity?.error?.errorMessage ||
+    "iCloud rejected the request. The photo may have changed since scan — rescan and retry."
+  )
+}
+
+// CloudKit records/modify returns one entry per operation. With atomic:true the
+// whole batch is transactional: any per-record failure rejects the entire batch
+// (nothing is deleted). On success each entry carries the updated recordChangeTag
+// and zoneID, which we capture so a subsequent recover can reuse a fresh tag.
+function evaluateModifyResponse(data) {
+  if (data && (data.serverErrorCode || data.error)) {
+    return { success: false, error: cloudKitErrorMessage(data) }
+  }
+  const records = Array.isArray(data?.records) ? data.records : []
+  const failed = records.find(
+    (record) => record && (record.serverErrorCode || record.error || record.reason)
+  )
+  if (failed) {
+    return { success: false, error: cloudKitErrorMessage(failed) }
+  }
+  const refsByRecordName = {}
+  for (const record of records) {
+    if (!record?.recordName) continue
+    const zone = record.zoneID || {}
+    refsByRecordName[record.recordName] = {
+      recordName: record.recordName,
+      changeTag: record.recordChangeTag || "",
+      zoneName: zone.zoneName || "",
+      ownerRecordName: zone.ownerRecordName || ""
+    }
+  }
+  return { success: true, refsByRecordName }
+}
+
+function mergeUpdatedAssetRef(originalRef, updatedRef) {
+  if (!updatedRef) return originalRef
+  return {
+    recordName: updatedRef.recordName || originalRef.recordName,
+    changeTag: updatedRef.changeTag || originalRef.changeTag,
+    zoneName: updatedRef.zoneName || originalRef.zoneName || "PrimarySync",
+    ownerRecordName: updatedRef.ownerRecordName || originalRef.ownerRecordName
+  }
+}
+
+async function postCloudKitModify(queryUrl, operations, zoneId, label) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), ICLOUD_API_TIMEOUT_MS)
+  try {
+    const response = await fetch(cloudKitModifyUrl(queryUrl), {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({
+        atomic: true,
+        operations,
+        zoneID: zoneId
+      }),
+      signal: controller.signal
+    })
+    if (!response.ok) {
+      const text = await response.text().catch(() => "")
+      throw new Error(
+        `${label} failed with HTTP ${response.status}${
+          text ? `: ${text.slice(0, 240)}` : ""
+        }`
+      )
+    }
+    return await response.json()
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 function fieldValue(record, name) {
@@ -225,35 +320,42 @@ async function fetchCloudKitPage(requestId, queryUrl, offset) {
 async function fetchCloudKitItemCount(queryUrl) {
   const batchUrl = cloudKitBatchUrl(queryUrl)
   if (batchUrl === queryUrl) return null
-  const response = await fetch(batchUrl, {
-    method: "POST",
-    credentials: "include",
-    headers: { "content-type": "text/plain" },
-    body: JSON.stringify({
-      batch: [
-        {
-          resultsLimit: 1,
-          query: {
-            filterBy: {
-              fieldName: "indexCountID",
-              fieldValue: {
-                type: "STRING_LIST",
-                value: ["CPLAssetByAssetDateWithoutHiddenOrDeleted"]
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), ICLOUD_API_TIMEOUT_MS)
+  try {
+    const response = await fetch(batchUrl, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({
+        batch: [
+          {
+            resultsLimit: 1,
+            query: {
+              filterBy: {
+                fieldName: "indexCountID",
+                fieldValue: {
+                  type: "STRING_LIST",
+                  value: ["CPLAssetByAssetDateWithoutHiddenOrDeleted"]
+                },
+                comparator: "IN"
               },
-              comparator: "IN"
+              recordType: "HyperionIndexCountLookup"
             },
-            recordType: "HyperionIndexCountLookup"
-          },
-          zoneWide: true,
-          zoneID: { zoneName: "PrimarySync" }
-        }
-      ]
+            zoneWide: true,
+            zoneID: { zoneName: "PrimarySync" }
+          }
+        ]
+      }),
+      signal: controller.signal
     })
-  })
-  if (!response.ok) return null
-  const json = await response.json()
-  const count = Number(json?.batch?.[0]?.records?.[0]?.fields?.itemCount?.value)
-  return Number.isFinite(count) && count > 0 ? count : null
+    if (!response.ok) return null
+    const json = await response.json()
+    const count = Number(json?.batch?.[0]?.records?.[0]?.fields?.itemCount?.value)
+    return Number.isFinite(count) && count > 0 ? count : null
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 function mapCloudKitItem(master, asset, index) {
@@ -323,8 +425,22 @@ function mapCloudKitItem(master, asset, index) {
   const recordName = master.recordName || assetRecordName
   const mediaKey = `icloud-${recordName}`
   const productUrl = assetRecordName
-    ? `https://www.icloud.com/photos/#/i,pz,${encodeURIComponent(assetRecordName)}/`
+    ? `${location.origin}/photos/#/i,pz,${encodeURIComponent(assetRecordName)}/`
     : window.location.href
+  // CPLAsset ref captured at scan time so trash/recover can issue a CloudKit
+  // records/modify (operationType "update", isDeleted 1/0). Requires the asset
+  // recordName + a changeTag + the record's zoneID.
+  const assetZone = asset.zoneID || master.zoneID || {}
+  const assetChangeTag = asset.recordChangeTag || master.recordChangeTag || ""
+  const icloudAsset =
+    assetRecordName && assetChangeTag
+      ? {
+          recordName: assetRecordName,
+          changeTag: assetChangeTag,
+          zoneName: assetZone.zoneName || "PrimarySync",
+          ownerRecordName: assetZone.ownerRecordName || ""
+        }
+      : undefined
   return {
     mediaKey,
     dedupKey: recordName,
@@ -346,7 +462,8 @@ function mapCloudKitItem(master, asset, index) {
     size: resourceSize(originalResource),
     takesUpSpace: null,
     isOriginalQuality: null,
-    duration: isVideo ? duration : undefined
+    duration: isVideo ? duration : undefined,
+    ...(icloudAsset ? { icloudAsset } : {})
   }
 }
 
@@ -666,48 +783,259 @@ async function getAllMediaItems(requestId, args) {
   }
 }
 
-function trashItems(requestId, args) {
+async function trashItems(requestId, args) {
   const dedupKeys = Array.isArray(args?.dedupKeys) ? args.dedupKeys : []
   const mediaKeysToTrash = Array.isArray(args?.mediaKeysToTrash)
     ? args.mediaKeysToTrash
     : []
-  if (!args?.dryRun) {
-    postError(
-      "trashItems",
-      requestId,
-      "iCloud trash is only available in dry-run test mode. No iCloud items were deleted."
-    )
-    return
-  }
   if (dedupKeys.length === 0 || mediaKeysToTrash.length === 0) {
     postError(
       "trashItems",
       requestId,
-      "iCloud trash dry-run requires selected duplicate media keys."
+      "iCloud trash requires selected duplicate media keys."
     )
     return
   }
 
-  postProgress(
-    requestId,
-    mediaKeysToTrash.length,
-    `Dry-run checked ${mediaKeysToTrash.length} iCloud item${
-      mediaKeysToTrash.length === 1 ? "" : "s"
-    }. Nothing was deleted.`
-  )
-  postResult("trashItems", requestId, {
-    dryRun: true,
-    trashedCount: 0,
-    requestedCount: mediaKeysToTrash.length,
-    trashedKeys: [],
-    trashedDedupKeys: [],
-    message: "iCloud delete dry-run completed. Nothing was deleted."
-  })
+  // Explicit dry-run (test mode): report without deleting anything.
+  if (args?.dryRun) {
+    postProgress(
+      requestId,
+      mediaKeysToTrash.length,
+      `Dry-run checked ${mediaKeysToTrash.length} iCloud item${
+        mediaKeysToTrash.length === 1 ? "" : "s"
+      }. Nothing was deleted.`
+    )
+    postResult("trashItems", requestId, {
+      dryRun: true,
+      trashedCount: 0,
+      requestedCount: mediaKeysToTrash.length,
+      trashedKeys: [],
+      trashedDedupKeys: [],
+      message: "iCloud delete dry-run completed. Nothing was deleted."
+    })
+    return
+  }
+
+  // Real path: CloudKit records/modify on each CPLAsset (isDeleted: 1).
+  // Requires per-item asset refs (recordName + changeTag + zone) captured at
+  // scan time. If any are missing/stale we fail closed — nothing is deleted.
+  const refs = Array.isArray(args?.icloudAssetRefs) ? args.icloudAssetRefs : []
+  if (refs.length !== dedupKeys.length) {
+    postError(
+      "trashItems",
+      requestId,
+      "iCloud trash metadata is missing or stale. Rescan to refresh item metadata, then retry."
+    )
+    return
+  }
+  const targets = dedupKeys.map((dedupKey, index) => ({
+    dedupKey,
+    mediaKey: mediaKeysToTrash[index],
+    ref: refs[index]
+  }))
+  for (const target of targets) {
+    const ref = target.ref
+    if (!ref || !ref.recordName || !ref.changeTag || !ref.ownerRecordName) {
+      postError(
+        "trashItems",
+        requestId,
+        `iCloud item ${target.dedupKey} is missing trash metadata (record name, change tag, or zone). Rescan to refresh, then retry.`
+      )
+      return
+    }
+  }
+
+  const queryUrl = cloudKitQueryUrl()
+  if (!queryUrl) {
+    postError(
+      "trashItems",
+      requestId,
+      "Cannot reach the iCloud Photos metadata service. Open iCloud Photos, wait for the library to load, and retry."
+    )
+    return
+  }
+
+  const zoneId = {
+    zoneName: targets[0].ref.zoneName || "PrimarySync",
+    ownerRecordName: targets[0].ref.ownerRecordName
+  }
+  const trashedDedupKeys = []
+  const trashedKeys = []
+  // Post-trash refs (with fresh changeTags from the modify response) so a
+  // subsequent recover can reuse them instead of needing a re-scan.
+  const postTrashRefs = []
+
+  try {
+    const chunks = chunkArray(targets, ICLOUD_MODIFY_BATCH_SIZE)
+    for (let index = 0; index < chunks.length; index++) {
+      const chunk = chunks[index]
+      postProgress(
+        requestId,
+        trashedDedupKeys.length,
+        `Moving iCloud batch ${index + 1} of ${chunks.length}...`,
+        "trashItems"
+      )
+      const operations = chunk.map((target) => ({
+        operationType: "update",
+        record: {
+          recordName: target.ref.recordName,
+          recordChangeTag: target.ref.changeTag,
+          recordType: "CPLAsset",
+          fields: { isDeleted: { value: 1 } }
+        }
+      }))
+      const data = await postCloudKitModify(
+        queryUrl,
+        operations,
+        zoneId,
+        `Moving iCloud batch ${index + 1}`
+      )
+      const outcome = evaluateModifyResponse(data)
+      if (!outcome.success) {
+        throw new Error(outcome.error)
+      }
+      for (const target of chunk) {
+        const updated = mergeUpdatedAssetRef(
+          target.ref,
+          outcome.refsByRecordName[target.ref.recordName]
+        )
+        trashedDedupKeys.push(target.dedupKey)
+        trashedKeys.push(target.mediaKey)
+        postTrashRefs.push(updated)
+      }
+      postProgress(
+        requestId,
+        trashedDedupKeys.length,
+        `Moved ${trashedDedupKeys.length} of ${dedupKeys.length} iCloud items to trash`,
+        "trashItems",
+        {
+          trashedKeys: trashedKeys.slice(),
+          trashedDedupKeys: trashedDedupKeys.slice()
+        }
+      )
+    }
+
+    postResult("trashItems", requestId, {
+      trashedCount: trashedDedupKeys.length,
+      trashedKeys,
+      trashedDedupKeys,
+      icloudAssetRefs: postTrashRefs
+    })
+  } catch (error) {
+    postError("trashItems", requestId, error, {
+      partial: trashedDedupKeys.length > 0,
+      trashedCount: trashedDedupKeys.length,
+      trashedKeys: trashedKeys.slice(),
+      trashedDedupKeys: trashedDedupKeys.slice(),
+      icloudAssetRefs: postTrashRefs.slice()
+    })
+  }
+}
+
+// Recover = same records/modify with isDeleted: 0, reusing the post-trash asset
+// refs returned by trashItems (changeTags are fresh as of the trash operation).
+async function restoreItems(requestId, args) {
+  const dedupKeys = Array.isArray(args?.dedupKeys) ? args.dedupKeys : []
+  if (dedupKeys.length === 0) {
+    postError("restoreItems", requestId, "iCloud restore requires dedupKeys.")
+    return
+  }
+  const refs = Array.isArray(args?.icloudAssetRefs) ? args.icloudAssetRefs : []
+  if (refs.length !== dedupKeys.length) {
+    postError(
+      "restoreItems",
+      requestId,
+      "iCloud restore metadata is missing. Recover the items manually from Recently Deleted in iCloud Photos."
+    )
+    return
+  }
+  for (let index = 0; index < refs.length; index++) {
+    const ref = refs[index]
+    if (!ref || !ref.recordName || !ref.changeTag || !ref.ownerRecordName) {
+      postError(
+        "restoreItems",
+        requestId,
+        `iCloud restore metadata for ${dedupKeys[index]} is missing. Recover the item manually from Recently Deleted in iCloud Photos.`
+      )
+      return
+    }
+  }
+
+  const queryUrl = cloudKitQueryUrl()
+  if (!queryUrl) {
+    postError(
+      "restoreItems",
+      requestId,
+      "Cannot reach the iCloud Photos metadata service. Open iCloud Photos, wait for the library to load, and retry. Items can also be recovered from Recently Deleted."
+    )
+    return
+  }
+
+  const zoneId = {
+    zoneName: refs[0].zoneName || "PrimarySync",
+    ownerRecordName: refs[0].ownerRecordName
+  }
+  const restoredDedupKeys = []
+  try {
+    const chunks = chunkArray(refs, ICLOUD_MODIFY_BATCH_SIZE)
+    for (let index = 0; index < chunks.length; index++) {
+      const chunk = chunks[index]
+      postProgress(
+        requestId,
+        restoredDedupKeys.length,
+        `Restoring iCloud batch ${index + 1} of ${chunks.length}...`,
+        "restoreItems"
+      )
+      const operations = chunk.map((ref) => ({
+        operationType: "update",
+        record: {
+          recordName: ref.recordName,
+          recordChangeTag: ref.changeTag,
+          recordType: "CPLAsset",
+          fields: { isDeleted: { value: 0 } }
+        }
+      }))
+      const data = await postCloudKitModify(
+        queryUrl,
+        operations,
+        zoneId,
+        `Restoring iCloud batch ${index + 1}`
+      )
+      const outcome = evaluateModifyResponse(data)
+      if (!outcome.success) {
+        throw new Error(outcome.error)
+      }
+      restoredDedupKeys.push(
+        ...dedupKeys.slice(
+          index * ICLOUD_MODIFY_BATCH_SIZE,
+          index * ICLOUD_MODIFY_BATCH_SIZE + chunk.length
+        )
+      )
+      postProgress(
+        requestId,
+        restoredDedupKeys.length,
+        `Restored ${restoredDedupKeys.length} of ${dedupKeys.length} iCloud items from trash`,
+        "restoreItems"
+      )
+    }
+
+    postResult("restoreItems", requestId, {
+      restoredCount: restoredDedupKeys.length,
+      restoredDedupKeys
+    })
+  } catch (error) {
+    postError("restoreItems", requestId, error, {
+      partial: restoredDedupKeys.length > 0,
+      restoredCount: restoredDedupKeys.length,
+      restoredDedupKeys: restoredDedupKeys.slice()
+    })
+  }
 }
 
 function healthCheck(requestId) {
   const onIcloudPhotos =
-    location.hostname === "www.icloud.com" &&
+    ["www.icloud.com", "www.icloud.com.cn"].includes(location.hostname) &&
     (location.pathname.startsWith("/photos") ||
       location.pathname.includes("/applications/photos"))
   const pageText = document.body?.innerText || ""
@@ -738,7 +1066,10 @@ window.addEventListener("message", async (event) => {
       postResult("listAlbums", requestId, [])
       break
     case "trashItems":
-      trashItems(requestId, args)
+      await trashItems(requestId, args)
+      break
+    case "restoreItems":
+      await restoreItems(requestId, args)
       break
     case "healthCheck":
       healthCheck(requestId)

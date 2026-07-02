@@ -310,3 +310,88 @@ describe("Amazon trashItems", () => {
     restore()
   })
 })
+
+// Amazon restore = same /drive/v1/trash endpoint as trash, with op:"remove".
+// Mirrors the trash chunking/retry path; the Undo button relies on this.
+describe("restoreItems", () => {
+  it("restores selected node ids from Amazon Photos trash with op:remove", async () => {
+    const { messages, restore } = collectMessages()
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve("{}")
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    sendCommand("restoreItems", "amazon-restore", {
+      dedupKeys: ["node-a", "node-b"],
+      batchSize: 25
+    })
+    await flush()
+    await flush()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://www.amazon.ca/drive/v1/trash",
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        body: JSON.stringify({
+          op: "remove",
+          conflictResolution: "RENAME",
+          value: ["node-a", "node-b"]
+        })
+      })
+    )
+    const result = messages.find(
+      (msg) => msg.action === "gptkResult" && msg.command === "restoreItems"
+    )
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        restoredCount: 2,
+        restoredDedupKeys: ["node-a", "node-b"]
+      }
+    })
+    restore()
+  })
+
+  it("caps Amazon restore batches at 50 node ids", async () => {
+    const { restore } = collectMessages()
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve("{}")
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const dedupKeys = Array.from({ length: 51 }, (_, index) => `node-${index}`)
+
+    sendCommand("restoreItems", "amazon-restore-batches", {
+      dedupKeys,
+      batchSize: 999
+    })
+    await flush()
+    await flush()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).value).toHaveLength(50)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).value).toEqual([
+      "node-50"
+    ])
+    restore()
+  })
+
+  it("rejects restore without valid dedupKeys", async () => {
+    const { messages, restore } = collectMessages()
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    sendCommand("restoreItems", "amazon-restore-invalid", {})
+    await flush()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    const result = messages.find(
+      (msg) => msg.action === "gptkResult" && msg.command === "restoreItems"
+    )
+    expect(result).toMatchObject({ success: false })
+    expect(result.error).toContain("dedupKeys")
+    restore()
+  })
+})

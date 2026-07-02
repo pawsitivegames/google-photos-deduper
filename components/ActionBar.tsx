@@ -84,18 +84,16 @@ export function ActionBar({
           ? photoSweepColors.surface
           : photoSweepColors.surfaceTint,
         backdropFilter: compact ? "none" : "saturate(180%) blur(24px)",
-        boxShadow: compact
-          ? "none"
-          : `0 18px 52px ${photoSweepColors.shadow}`,
+        boxShadow: compact ? "none" : `0 18px 52px ${photoSweepColors.shadow}`,
         display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
+        justifyContent: compact ? "space-between" : "flex-start",
+        alignItems: compact ? "center" : "stretch",
         flexWrap: "wrap",
         gap: compact ? 1 : 1.5
       }}>
       <Box
         sx={{
-          minWidth: compact ? "100%" : { xs: "100%", sm: 240 },
+          minWidth: compact ? "100%" : "100%",
           display: compact ? "grid" : "block",
           gridTemplateColumns: compact ? "36px minmax(0, 1fr)" : undefined,
           gap: compact ? 1 : undefined,
@@ -291,8 +289,12 @@ export function ActionBar({
               borderRadius: 1.5,
               fontWeight: 800,
               bgcolor: photoSweepColors.error,
+              background: `linear-gradient(135deg, ${photoSweepColors.error} 0%, #FF6158 100%)`,
+              boxShadow: "0 8px 18px rgba(226, 81, 72, 0.18)",
               "&:hover": {
-                bgcolor: photoSweepColors.errorDark
+                bgcolor: photoSweepColors.errorDark,
+                background: `linear-gradient(135deg, ${photoSweepColors.errorDark} 0%, ${photoSweepColors.error} 100%)`,
+                boxShadow: "0 10px 22px rgba(226, 81, 72, 0.22)"
               }
             }}>
             Move {duplicateCount} to Trash
@@ -303,11 +305,19 @@ export function ActionBar({
       {totalGroupCount > 0 && !compact && (
         <Stack
           direction="row"
-          spacing={0.75}
+          spacing={0.6}
           alignItems="center"
           flexWrap="wrap"
           useFlexGap
-          sx={{ width: compact ? "100%" : "auto" }}>
+          sx={{
+            width: "100%",
+            "& .MuiButton-root": {
+              minHeight: 36,
+              px: 1,
+              fontWeight: 750,
+              whiteSpace: "nowrap"
+            }
+          }}>
           <ToggleButtonGroup
             value={reviewFilter}
             exclusive
@@ -327,15 +337,13 @@ export function ActionBar({
               if (value !== null) onReviewFilterChange(value)
             }}>
             <ToggleButton value="all">
-              All{compact ? "" : ` sets (${totalGroupCount.toLocaleString()})`}
+              All sets ({totalGroupCount.toLocaleString()})
             </ToggleButton>
             <ToggleButton value="exact">
-              {compact
-                ? "Exact"
-                : `Identical (${exactGroupCount.toLocaleString()})`}
+              Identical ({exactGroupCount.toLocaleString()})
             </ToggleButton>
             <ToggleButton value="similar">
-              Similar{compact ? "" : ` (${similarGroupCount.toLocaleString()})`}
+              Similar ({similarGroupCount.toLocaleString()})
             </ToggleButton>
           </ToggleButtonGroup>
           {!compact && (
@@ -418,11 +426,7 @@ export function ActionBar({
             disabled={duplicateCount === 0}
             onClick={onTrash}
             sx={compact ? { width: "100%" } : undefined}>
-            {compact
-              ? `Move ${duplicateCount} to Trash`
-              : `Move ${duplicateCount} Duplicate${
-                  duplicateCount !== 1 ? "s" : ""
-                } to Trash`}
+            Move {duplicateCount} to Trash
           </Button>
         </Stack>
       )}

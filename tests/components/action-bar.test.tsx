@@ -157,7 +157,7 @@ describe("ActionBar", () => {
     it("is enabled when duplicateCount > 0", () => {
       renderActionBar({ duplicateCount: 4 })
       const btn = screen.getByRole("button", {
-        name: /Move 4 Duplicates to Trash/i
+        name: /Move 4 to Trash/i
       })
       expect(btn).toBeEnabled()
     })
@@ -165,7 +165,7 @@ describe("ActionBar", () => {
     it("is disabled when duplicateCount is 0", () => {
       renderActionBar({ duplicateCount: 0 })
       const btn = screen.getByRole("button", {
-        name: /Move 0 Duplicates? to Trash/i
+        name: /Move 0 to Trash/i
       })
       expect(btn).toBeDisabled()
     })
@@ -173,7 +173,7 @@ describe("ActionBar", () => {
     it("shows singular 'Duplicate' when duplicateCount is 1", () => {
       renderActionBar({ duplicateCount: 1 })
       expect(
-        screen.getByRole("button", { name: /Move 1 Duplicate to Trash/i })
+        screen.getByRole("button", { name: /Move 1 to Trash/i })
       ).toBeInTheDocument()
     })
   })
@@ -205,9 +205,7 @@ describe("ActionBar", () => {
 
     it("calls onTrash when Move to Trash is clicked", () => {
       const { callbacks } = renderActionBar({ duplicateCount: 3 })
-      fireEvent.click(
-        screen.getByRole("button", { name: /Move 3 Duplicates to Trash/i })
-      )
+      fireEvent.click(screen.getByRole("button", { name: /Move 3 to Trash/i }))
       expect(callbacks.onTrash).toHaveBeenCalledOnce()
     })
 
@@ -260,7 +258,7 @@ describe("ActionBar", () => {
     it("does not call onTrash when button is disabled", () => {
       const { callbacks } = renderActionBar({ duplicateCount: 0 })
       const btn = screen.getByRole("button", {
-        name: /Move 0 Duplicates? to Trash/i
+        name: /Move 0 to Trash/i
       })
       fireEvent.click(btn)
       expect(callbacks.onTrash).not.toHaveBeenCalled()

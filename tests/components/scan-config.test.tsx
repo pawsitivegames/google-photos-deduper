@@ -278,7 +278,10 @@ describe("ScanConfig — photo source", () => {
     expect(
       screen.getByRole("button", { name: /Check entire library/i })
     ).toBeInTheDocument()
-    expect(screen.getByText(/dry-run test mode only/i)).toBeInTheDocument()
+    expect(screen.getByText(/Recently Deleted/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Free and paid limits match the Google Photos workflow/i)
+    ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: /More options/i }))
     expect(
@@ -353,11 +356,13 @@ describe("ScanConfig — photo source", () => {
     renderConfig({ sourceProvider: "amazon" })
     expect(
       screen.getByRole("link", { name: /Open Amazon Photos/i })
-    ).toHaveAttribute("href", "https://www.amazon.ca/photos?sf=1")
+    ).toHaveAttribute("href", "https://www.amazon.com/photos?sf=1")
     expect(
       screen.getByRole("button", { name: /Check entire library/i })
     ).toBeInTheDocument()
-    expect(screen.getByText(/Amazon Photos trash/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Free and paid limits match the Google Photos workflow/i)
+    ).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: /More options/i }))
     expect(
       screen.queryByRole("combobox", { name: /Library area/i })

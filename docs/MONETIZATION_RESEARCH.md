@@ -13,9 +13,9 @@ Recommended launch package:
 - Name: **PhotoSweep**
 - Tagline: **Clean up duplicate photos without uploading your library.**
 - Free tier: limited scan/review/report workflow that proves trust.
-- Paid tier: unlock scale, bulk cleanup, advanced controls, large-library resume, and multi-provider support.
-- Pricing: **$9 Cleanup Pass**, **$29 Lifetime Pro**, optional **$19/year Pro** later.
-- Payment path: ExtensionPay for fastest launch, or Stripe Checkout plus a small license API for more control.
+- Paid tiers: unlock larger Google Photos scans, more reviewed groups, bulk cleanup, full reports, full scan, and large-library resume.
+- Launch pricing: **$2.99 Mini Cleanup**, **$4.99 Cleanup Pass**, **$14.99 Lifetime Early Access**.
+- Payment path: Stripe Checkout plus a small signed license API.
 - Gate strategy: signed entitlements plus centralized feature checks. Treat it as commercial friction, not unbreakable DRM.
 
 The product should not monetize with ads, affiliate injection, or data sharing. That would conflict with Chrome Web Store policy pressure and the product's strongest market advantage: private local analysis.
@@ -30,7 +30,7 @@ The extension solves a painful, recurring, high-trust problem:
 - Users do not want to upload private photos to another analysis service.
 - Storage pressure creates a visible willingness-to-pay moment.
 
-Google One is a useful value anchor. As of this research, Google lists 15 GB included storage, 100 GB at $1.99/month, 2 TB at $9.99/month, and 5 TB at $19.99/month for Google Photos, Drive, and Gmail storage. That makes a $9 cleanup pass and $29 lifetime unlock easy to explain: one useful cleanup can delay or reduce the need for paid storage.
+Google One is a useful value anchor. As of this research, Google lists 15 GB included storage, 100 GB at $1.99/month, 2 TB at $9.99/month, and 5 TB at $19.99/month for Google Photos, Drive, and Gmail storage. That makes a $4.99 cleanup pass and $14.99 lifetime early-access unlock easy to explain: one useful cleanup can delay or reduce the need for paid storage.
 
 The product should avoid claiming guaranteed storage savings. Instead, say:
 
@@ -165,18 +165,19 @@ Observed price anchors:
 
 Implication:
 
-- $29 lifetime is credible for a focused browser extension.
-- $39 lifetime is plausible after strong proof, testimonials, and provider expansion.
-- $19/year is plausible if ongoing breakage fixes and multi-provider support are explicit.
-- $9 for a short cleanup pass fits users who only need one session.
+- $14.99 lifetime early access is a lower-friction launch anchor for a focused browser extension.
+- $29-$39 lifetime is plausible later after strong proof, testimonials, and validated provider expansion.
+- $19/year is plausible later if ongoing breakage fixes and multi-provider support are explicit.
+- $4.99 for a short cleanup pass fits users who only need one larger session.
 
 Recommended first public pricing:
 
 | Plan | Price | Purpose |
 | --- | ---: | --- |
 | Free | $0 | Build trust and prove value |
-| Cleanup Pass | $9 for 7 days | Capture one-time cleanup demand |
-| Lifetime Pro | $29 | Primary conversion plan |
+| Mini Cleanup | $2.99 | Capture small one-session cleanup demand |
+| Cleanup Pass | $4.99 for 7 days | Capture one-time large cleanup demand |
+| Lifetime Early Access | $14.99 | Primary conversion plan |
 
 Add later:
 
@@ -199,27 +200,29 @@ Bad framing:
 
 > Pay to delete more photos.
 
-The user is already anxious about photo deletion. The paid promise should be "finish safely at scale," not "unlock deletion." This is why the Cleanup Pass is useful: it fits the mental model of a one-time project while leaving Lifetime Pro available for users with large or recurring libraries.
+The user is already anxious about photo deletion. The paid promise should be "finish safely at scale," not "unlock deletion." This is why Mini Cleanup and Cleanup Pass are useful: they fit the mental model of a one-time project while leaving Lifetime Early Access available for users with large or recurring libraries.
 
 Recommended pricing page order:
 
 1. Free
-2. Lifetime Pro
+2. Lifetime Early Access
 3. Cleanup Pass
+4. Mini Cleanup
 
-Even if the Cleanup Pass is the cheapest paid option, Lifetime Pro should be visually emphasized because it is the cleanest offer and avoids subscription fatigue.
+Even if Mini Cleanup is the cheapest paid option, Lifetime Early Access should be visually emphasized because it is the cleanest offer and avoids subscription fatigue.
 
 ### Price Testing Plan
 
 Start with:
 
-- Cleanup Pass: $9
-- Lifetime Pro: $29
+- Mini Cleanup: $2.99
+- Cleanup Pass: $4.99
+- Lifetime Early Access: $14.99
 
 Then test:
 
-- $39 Lifetime Pro after adding iCloud/Amazon support.
-- $12 Cleanup Pass if conversion is strong and refunds are low.
+- $29-$39 Lifetime after adding validated iCloud/Amazon support.
+- $9-$12 Cleanup Pass if conversion is strong and refunds are low.
 - $19/year only after users demonstrate recurring usage or provider breakage creates a clear maintenance story.
 
 Signals to watch:
@@ -227,14 +230,14 @@ Signals to watch:
 - Upgrade screen view to purchase conversion.
 - Refund rate.
 - Support tickets per paid user.
-- Number of paid users who clean more than one provider.
+- Number of paid users who ask for more than one provider.
 - Number of paid users who return after 30 days.
 - Number of free users who hit the group/scan cap.
 
 Decision rule:
 
 - If most paid users complete one cleanup and never return, emphasize Cleanup Pass and Lifetime.
-- If many users return monthly or across providers, introduce Annual Pro.
+- If many users return monthly or ask for validated additional providers, introduce Annual Pro.
 - If refund rate rises after raising lifetime price, move back to $29 and improve proof assets before retesting.
 
 ## Store and Policy Constraints
@@ -462,25 +465,25 @@ ExtensionPay is convenient, but it is not the only low-friction option. Its 5% f
 | ExtensionPay | Fast extension-specific monetization | Built for extensions, supports one-time/subscription/trial flows, less backend work | 5% fee on top of Stripe, less control, dependency risk | Useful only for fastest validation |
 | Gumroad | Fastest manual product sale | Simple product sale, low engineering | Higher fee, weaker in-extension entitlement UX | Acceptable for a manual prelaunch only |
 
-Approximate fee comparison for a $29 Lifetime Pro purchase:
+Approximate fee comparison for a $14.99 Lifetime Early Access purchase:
 
 | Option | Approximate fee | Approximate net | Notes |
 | --- | ---: | ---: | --- |
-| Stripe direct | $1.14 | $27.86 | Uses 2.9% + $0.30 US card pricing; tax handling is separate |
-| ExtensionPay + Stripe | $2.59 | $26.41 | ExtensionPay 5% plus Stripe processing |
-| Polar | $1.95 | $27.05 | Based on 5% + $0.50 MoR pricing |
-| Lemon Squeezy | $1.95 | $27.05 | Based on 5% + $0.50 MoR pricing |
-| Gumroad | $3.40 | $25.60 | Based on 10% + $0.50 pricing |
+| Stripe direct | $0.73 | $14.26 | Uses 2.9% + $0.30 US card pricing; tax handling is separate |
+| ExtensionPay + Stripe | $1.48 | $13.51 | ExtensionPay 5% plus Stripe processing |
+| Polar | $1.25 | $13.74 | Based on 5% + $0.50 MoR pricing |
+| Lemon Squeezy | $1.25 | $13.74 | Based on 5% + $0.50 MoR pricing |
+| Gumroad | $2.00 | $12.99 | Based on 10% + $0.50 pricing |
 
-Approximate fee comparison for a $9 Cleanup Pass:
+Approximate fee comparison for a $4.99 Cleanup Pass:
 
 | Option | Approximate fee | Approximate net | Notes |
 | --- | ---: | ---: | --- |
-| Stripe direct | $0.56 | $8.44 | Best margin |
-| ExtensionPay + Stripe | $1.01 | $7.99 | Similar to MoR options at low price, but without MoR benefits |
-| Polar | $0.95 | $8.05 | MoR tax handling included |
-| Lemon Squeezy | $0.95 | $8.05 | MoR tax handling included |
-| Gumroad | $1.40 | $7.60 | Highest fee among these options |
+| Stripe direct | $0.44 | $4.55 | Best margin |
+| ExtensionPay + Stripe | $0.69 | $4.30 | Similar to MoR options at low price, but without MoR benefits |
+| Polar | $0.75 | $4.24 | MoR tax handling included |
+| Lemon Squeezy | $0.75 | $4.24 | MoR tax handling included |
+| Gumroad | $1.00 | $3.99 | Highest fee among these options |
 
 Recommended sequence if engineering time is available:
 
@@ -506,7 +509,7 @@ Best recommendation for PhotoSweep:
 
 Minimum custom Stripe stack:
 
-- Stripe Checkout for `cleanup_pass`, `pro_lifetime`, and future `pro_annual`.
+- Stripe Checkout for `mini_cleanup`, `cleanup_pass_7d`, and `lifetime_early_access`.
 - Stripe webhooks for checkout completion, refund, dispute, and subscription changes.
 - `licenses` table keyed by Stripe customer/session.
 - License recovery endpoint by email.
@@ -783,7 +786,7 @@ Good flow:
 3. App shows duplicate count and estimated recoverable storage.
 4. User reviews free results.
 5. User hits a scale limit.
-6. Paywall offers Cleanup Pass or Lifetime Pro.
+6. Paywall offers Mini Cleanup, Cleanup Pass, or Lifetime Early Access.
 
 Bad flow:
 
@@ -804,11 +807,12 @@ Headline:
 
 Body:
 
-> Unlock Pro to review the full scan, export complete reports, and clean larger libraries. Photo analysis stays local in your browser.
+> Upgrade to finish this cleanup safely, export complete reports, and use large-library resume tools. Photo analysis stays local in your browser.
 
 Buttons:
 
-- Unlock Lifetime Pro
+- Lifetime Early Access
+- Mini Cleanup
 - Get 7-Day Cleanup Pass
 - Continue With Free Results
 
@@ -889,9 +893,9 @@ Use when:
 
 ### Recommended First Implementation
 
-Use ExtensionPay for the first paid test unless there is already a backend you want to own.
+Use Stripe Checkout with the included signed license API for the first paid test.
 
-If building custom, use Stripe Checkout with:
+The backend should use:
 
 - `customers`
 - `checkout.sessions`
@@ -1080,7 +1084,7 @@ Example:
 | --- | --- | --- |
 | Cleanup Pass | Every launch or every 12 hours | Until `expiresAt`, plus 24 hours |
 | Annual Pro | Every 3-7 days | 14 days |
-| Lifetime Pro | Every 30-90 days | 90 days |
+| Lifetime Early Access | Every 30-90 days | 90 days |
 
 ## Open Source and Licensing Implications
 
@@ -1288,10 +1292,11 @@ Goal:
 
 Ship:
 
-- ExtensionPay or Stripe Checkout.
+- Stripe Checkout.
 - Signed entitlement cache.
+- Mini Cleanup.
 - Cleanup Pass.
-- Lifetime Pro.
+- Lifetime Early Access.
 - License recovery.
 - Refund policy.
 
@@ -1299,33 +1304,32 @@ Goal:
 
 - Start charging only after the app can show value first.
 
-### Phase 4: Multi-Provider Expansion
+### Phase 4: Multi-Provider Maintenance
 
 Ship:
 
-- iCloud Photos Pro support when stable.
-- Amazon Photos Pro support when stable.
+- Keep Google Photos, iCloud Photos, and Amazon Photos under the same free and
+  paid limits once each provider has current live Trash/Restore evidence.
 - Provider-specific landing pages.
 - Annual Pro if maintenance burden is clear.
 
 ## Suggested Feature Matrix
 
-| Feature | Free | Cleanup Pass | Lifetime Pro |
-| --- | --- | --- | --- |
-| Local duplicate scan | Limited | Unlimited during pass | Unlimited |
-| Scan cap | 1,000 photos | Unlimited | Unlimited |
-| Duplicate groups | 25 groups | Unlimited | Unlimited |
-| Full-library scan | No | Yes | Yes |
-| Review UI | Limited | Full | Full |
-| Bulk Trash | 10 items | Full | Full |
-| Safety confirmations | Yes | Yes | Yes |
-| Result reports | Yes | Yes | Yes |
-| Complete CSV/JSON export | Limited | Yes | Yes |
-| Checkpoint/resume | Limited | Yes | Yes |
-| Advanced keep rules | No | Yes | Yes |
-| Similarity controls | No | Yes | Yes |
-| iCloud/Amazon providers | No or preview | Yes during pass | Yes |
-| Priority support | No | During pass | Yes |
+| Feature | Free | Mini Cleanup | Cleanup Pass | Lifetime Early Access |
+| --- | --- | --- | --- | --- |
+| Local duplicate scan | Limited | Limited | Large session | Unlimited |
+| Scan cap | 1,000 photos | 2,500 photos | 10,000 photos/session | Unlimited |
+| Duplicate groups | 25 groups | 75 groups | Unlimited | Unlimited |
+| Full-library scan | No | No | Yes | Yes |
+| Review UI | Visible groups | 75 groups | Full | Full |
+| Bulk Trash | 10 items | 100 items | Full | Full |
+| Safety confirmations | Yes | Yes | Yes | Yes |
+| Result reports | Limited | Session | Full | Full |
+| Complete CSV/JSON export | Limited | Session | Yes | Yes |
+| Checkpoint/resume | Limited | Limited | Large resume | Large resume |
+| Advanced keep rules | Yes | Yes | Yes | Yes |
+| Similarity controls | Yes | Yes | Yes | Yes |
+| Supported providers | Google, iCloud, Amazon | Google, iCloud, Amazon | Google, iCloud, Amazon | Google, iCloud, Amazon |
 
 ## Implementation Backlog
 
@@ -1342,7 +1346,7 @@ Ship:
 
 ### Licensing
 
-- Choose ExtensionPay or custom Stripe.
+- Use Stripe Checkout plus the signed license API.
 - Add entitlement service.
 - Add local signed entitlement cache.
 - Add action-layer gate checks.
@@ -1399,7 +1403,7 @@ Ship:
 
 ### Week 3: Payment Validation
 
-- Add ExtensionPay or Stripe test mode.
+- Add Stripe test mode.
 - Add entitlement cache.
 - Add license recovery.
 - Add expired/pass/lifetime test fixtures.
@@ -1408,7 +1412,7 @@ Ship:
 ### Week 4: Beta and Pricing Test
 
 - Invite beta users.
-- Offer $9 Cleanup Pass and $29 Lifetime.
+- Offer $2.99 Mini Cleanup, $4.99 Cleanup Pass, and $14.99 Lifetime Early Access.
 - Collect support/refund issues.
 - Tune free limits based on trust and conversion.
 - Decide whether to ship paid publicly or extend beta.
@@ -1419,9 +1423,9 @@ Ship:
 | --- | --- | --- |
 | Brand | PhotoSweep | Trademark/domain conflict appears |
 | First market | Chrome + Google Photos | iCloud proves stronger in beta |
-| Payment provider | ExtensionPay | Existing backend makes Stripe cheap |
-| Primary price | $29 Lifetime | Conversion strong enough to test $39 |
-| Secondary price | $9 Cleanup Pass | Most users reject lifetime |
+| Payment provider | Stripe Checkout | Merchant-of-record/tax handling becomes the blocker |
+| Primary price | $14.99 Lifetime Early Access | Conversion strong enough to test $29 |
+| Secondary price | $4.99 Cleanup Pass | Most users reject lifetime |
 | Subscription | Defer | Users return monthly or provider maintenance is heavy |
 | Source license | Keep MIT | There is a deliberate business shift toward proprietary releases |
 | Device limits | None at launch | License sharing becomes measurable |

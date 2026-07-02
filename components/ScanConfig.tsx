@@ -25,6 +25,15 @@ import {
   describeScanCheckpointResume,
   summarizeScanCheckpoint
 } from "../lib/scan-checkpoint"
+import {
+  canUseScanMode,
+  canUsePaidProvider,
+  getEstimatedScanCount,
+  getEffectivePlanId,
+  getScanGate,
+  PLAN_LABELS,
+  type Entitlement
+} from "../lib/entitlement"
 import { photoSweepColors } from "../lib/theme"
 import type { GpdAlbum, PhotoProvider, ScanSettings } from "../lib/types"
 
@@ -44,7 +53,7 @@ function isDateRangeInvalid(settings: ScanSettings): boolean {
 
 function providerUrl(provider: ScanSettings["sourceProvider"]): string {
   if (provider === "icloud") return "https://www.icloud.com/photos"
-  if (provider === "amazon") return "https://www.amazon.ca/photos?sf=1"
+  if (provider === "amazon") return "https://www.amazon.com/photos?sf=1"
   return "https://photos.google.com/"
 }
 
@@ -56,10 +65,10 @@ function providerLabel(provider: ScanSettings["sourceProvider"]): string {
 
 function providerHelpText(provider: ScanSettings["sourceProvider"]): string {
   if (provider === "icloud") {
-    return "Scan iCloud Photos by walking the full web grid. Trash actions run in dry-run test mode only."
+    return "Scan iCloud Photos through the signed-in web session. Free and paid limits match the Google Photos workflow; review tiny test batches before moving items to Recently Deleted."
   }
   if (provider === "amazon") {
-    return "Scan Amazon Photos through the signed-in Canada web session. Confirmed trash actions move selected duplicates to Amazon Photos trash."
+    return "Scan Amazon Photos through the signed-in web session. Free and paid limits match the Google Photos workflow."
   }
   return "Best for full duplicate cleanup. You can scan the whole timeline, an album, or a date range, then move duplicates to Google Photos trash."
 }
@@ -93,6 +102,7 @@ interface ScanConfigProps {
   settings: ScanSettings
   onSettingsChange: (settings: Partial<ScanSettings>) => void
   onStartScan: () => void
+  onOpenProvider?: (provider: PhotoProvider) => void
   onResumeScan?: () => void
   onDismissResume?: () => void
   onClearCache: () => void
@@ -107,6 +117,8 @@ interface ScanConfigProps {
   albumsLoading?: boolean
   albumsError?: string | null
   onRefreshAlbums?: () => void
+  entitlement?: Entitlement
+  onUpgrade?: (detail?: string) => void
   compact?: boolean
 }
 
@@ -114,6 +126,7 @@ export function ScanConfig({
   settings,
   onSettingsChange,
   onStartScan,
+  onOpenProvider,
   onResumeScan,
   onDismissResume,
   onClearCache,
@@ -128,6 +141,8 @@ export function ScanConfig({
   albumsLoading = false,
   albumsError = null,
   onRefreshAlbums,
+  entitlement,
+  onUpgrade,
   compact = false
 }: ScanConfigProps) {
   const dateRangeInvalid = isDateRangeInvalid(settings)
@@ -143,6 +158,11 @@ export function ScanConfig({
   )
   const showUnscopedFullScanWarning =
     settings.scanMode === "full" && !hasScanScope
+  const estimatedScanCount = getEstimatedScanCount(settings)
+  const scanGate = getScanGate(settings, estimatedScanCount, entitlement)
+  const fullScanAllowed = canUseScanMode("full", entitlement)
+  const planName = PLAN_LABELS[getEffectivePlanId(entitlement)]
+  const providerPaidSupported = canUsePaidProvider(sourceProvider, entitlement)
   if (!hasGptk && sourceProvider === "google") {
     if (compact) {
       return (
@@ -160,7 +180,7 @@ export function ScanConfig({
           {isIcloud
             ? "iCloud Photos is not connected. Please open icloud.com/photos, sign in, and try again."
             : isAmazon
-              ? "Amazon Photos is not connected. Please open amazon.ca/photos?sf=1, sign in, and try again."
+              ? "Amazon Photos is not connected. Please open Amazon Photos on your Amazon country site, sign in, and try again."
               : "GPTK is not loaded on the Google Photos page. Please reload photos.google.com and try again."}
         </Alert>
       </Box>
@@ -198,9 +218,7 @@ export function ScanConfig({
           borderRadius: compact ? 2 : 3,
           bgcolor: compact ? "transparent" : photoSweepColors.surfaceTint,
           backdropFilter: compact ? "none" : "saturate(180%) blur(22px)",
-          boxShadow: compact
-            ? "none"
-            : `0 24px 70px ${photoSweepColors.shadow}`
+          boxShadow: compact ? "none" : `0 24px 70px ${photoSweepColors.shadow}`
         }}>
         {!compact && (
           <Box
@@ -315,11 +333,16 @@ export function ScanConfig({
                   <ToggleButton value="amazon">Amazon Photos</ToggleButton>
                 </ToggleButtonGroup>
                 <Button
-                  href={providerUrl(sourceProvider)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={onOpenProvider ? undefined : providerUrl(sourceProvider)}
+                  target={onOpenProvider ? undefined : "_blank"}
+                  rel={onOpenProvider ? undefined : "noopener noreferrer"}
                   size="small"
                   startIcon={<OpenInNewRoundedIcon />}
+                  onClick={(event) => {
+                    if (!onOpenProvider) return
+                    event.preventDefault()
+                    onOpenProvider(sourceProvider)
+                  }}
                   sx={{ mt: 1 }}>
                   Open {providerLabel(sourceProvider)}
                 </Button>
@@ -355,7 +378,6 @@ export function ScanConfig({
             <>
               <TextField
                 select={supportsAlbumScope}
-                label="Library area"
                 size="small"
                 fullWidth
                 value={
@@ -367,6 +389,7 @@ export function ScanConfig({
                 SelectProps={
                   supportsAlbumScope
                     ? {
+                        inputProps: { "aria-label": "Library area" },
                         displayEmpty: true,
                         renderValue: (value) =>
                           value
@@ -376,6 +399,11 @@ export function ScanConfig({
                     : undefined
                 }
                 InputProps={supportsAlbumScope ? undefined : { readOnly: true }}
+                inputProps={
+                  supportsAlbumScope
+                    ? undefined
+                    : { "aria-label": "Library area" }
+                }
                 helperText={undefined}
                 sx={{
                   "& .MuiInputBase-root": {
@@ -443,12 +471,13 @@ export function ScanConfig({
                     minWidth: 0,
                     overflow: "hidden",
                     textOverflow: "ellipsis"
-                  }}>
+                  }}
+                  title={albumsError || undefined}>
                   {supportsAlbumScope
                     ? albumsLoading
                       ? "Loading albums..."
                       : albumsError
-                        ? albumsError
+                        ? "Albums unavailable"
                         : compactScopeHelp(sourceProvider)
                     : compactScopeHelp(sourceProvider)}
                 </Typography>
@@ -622,6 +651,22 @@ export function ScanConfig({
           </Alert>
         )}
 
+        {!scanGate.allowed && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {scanGate.reason === "full_scan_locked"
+              ? "Full scan is a paid cleanup tool. Switch to Smart scan to try PhotoSweep for free."
+              : scanGate.reason === "unscoped_scan_locked"
+                ? `Your ${planName} plan needs an album, date range, or smaller test batch before scanning.`
+                : `This scope is above the ${scanGate.limit?.toLocaleString()} photo scan limit for ${planName}.`}
+          </Alert>
+        )}
+
+        {!providerPaidSupported && sourceProvider !== "google" && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {providerLabel(sourceProvider)} is not enabled for this plan.
+          </Alert>
+        )}
+
         {batchLimit && (
           <Alert severity="info" sx={{ mb: 2 }}>
             Test batch is on. This scan will check only{" "}
@@ -636,7 +681,17 @@ export function ScanConfig({
           fullWidth
           size="large"
           startIcon={<SearchRoundedIcon />}
-          onClick={() => onStartScan()}
+          onClick={() => {
+            if (!scanGate.allowed) {
+              onUpgrade?.(
+                scanGate.reason === "full_scan_locked"
+                  ? "Full scan unlocks with Cleanup Pass or Lifetime Early Access."
+                  : `This scan is above the ${scanGate.limit?.toLocaleString()} photo limit for ${planName}.`
+              )
+              return
+            }
+            onStartScan()
+          }}
           disabled={dateRangeInvalid}
           sx={{
             mb: compact ? 1 : 2,
@@ -693,7 +748,9 @@ export function ScanConfig({
             border: "1px solid",
             borderColor: "rgba(214,226,221,0.86)",
             borderRadius: compact ? 1.5 : 2,
-            bgcolor: compact ? "rgba(255,255,255,0.82)" : photoSweepColors.surface,
+            bgcolor: compact
+              ? "rgba(255,255,255,0.82)"
+              : photoSweepColors.surface,
             width: "100%",
             maxWidth: "100%",
             boxSizing: "border-box",
@@ -733,10 +790,19 @@ export function ScanConfig({
                 size="small"
                 fullWidth
                 onChange={(_, value) => {
-                  if (value !== null) onSettingsChange({ scanMode: value })
+                  if (value === null) return
+                  if (value === "full" && !fullScanAllowed) {
+                    onUpgrade?.(
+                      `${planName} keeps Full scan locked. Use Smart scan for free proof, or upgrade to unlock Full scan.`
+                    )
+                    return
+                  }
+                  onSettingsChange({ scanMode: value })
                 }}>
                 <ToggleButton value="smart">Smart</ToggleButton>
-                <ToggleButton value="full">Full</ToggleButton>
+                <ToggleButton value="full" aria-label="Full">
+                  Full{fullScanAllowed ? "" : " (locked)"}
+                </ToggleButton>
               </ToggleButtonGroup>
               {!compact && (
                 <Typography

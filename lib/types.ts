@@ -192,8 +192,19 @@ export interface GpdMediaItem {
   takesUpSpace?: boolean | null
   spaceTaken?: number
   isOwned?: boolean
+  isFavorite?: boolean
   isOriginalQuality?: boolean | null
   duration?: number // video duration (undefined for photos)
+  // iCloud only: the CPLAsset record ref needed to trash/recover via CloudKit
+  // records/modify. changeTag is captured at scan time; if it goes stale before
+  // trash (rare: the asset was edited elsewhere), the modify fails closed and
+  // nothing is deleted.
+  icloudAsset?: {
+    recordName: string
+    changeTag: string
+    zoneName: string
+    ownerRecordName: string
+  }
 }
 
 export interface GpdAlbum {
@@ -257,6 +268,8 @@ export interface ScanSettings {
   albumScope?: ScanAlbumScope
   amazonBatchLimit?: number
   icloudBatchLimit?: number
+  exactOnly?: boolean
+  protectFavorites?: boolean
 }
 
 export interface ScanAlbumScope {
@@ -269,6 +282,6 @@ export interface ScanAlbumScope {
 export const DEFAULT_SETTINGS: ScanSettings = {
   sourceProvider: "google",
   similarityThreshold: 0.95,
-  scanMode: "full",
+  scanMode: "smart",
   smartWindowSec: 1
 }

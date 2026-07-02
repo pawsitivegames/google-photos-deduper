@@ -334,7 +334,7 @@ describe("launch flow", () => {
 
     expect(mockChrome.tabs.get).toHaveBeenCalledWith(52)
     expect(mockChrome.tabs.update).toHaveBeenCalledWith(52, {
-      url: "https://www.amazon.ca/photos?sf=1",
+      url: "https://www.amazon.com/photos?sf=1",
       active: true
     })
     expect(mockChrome.tabs.create).not.toHaveBeenCalled()

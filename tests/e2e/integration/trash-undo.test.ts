@@ -14,6 +14,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test"
 
 import {
   clearStorage,
+  injectEntitlement,
   injectScanResults,
   launchExtension,
   makeGroups,
@@ -76,9 +77,9 @@ test("trashes selected groups and removes them from the UI", async () => {
     timeout: 8_000
   })
 
-  // Click "Move N Duplicates to Trash" in the ActionBar
+  // Click "Move N to Trash" in the ActionBar
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
 
   // Confirm dialog appears
@@ -123,12 +124,73 @@ test("trashes selected groups and removes them from the UI", async () => {
   await page.close()
 })
 
+test("free Trash cap is cumulative across the cleanup session", async () => {
+  await clearStorage(context)
+  const { groups, mediaItems } = makeGroups(2, 2)
+  groups[0].mediaKeys = Array.from({ length: 11 }, (_, i) => `cap-group0-item${i}`)
+  for (let i = 0; i < 11; i++) {
+    const key = `cap-group0-item${i}`
+    mediaItems[key] = {
+      mediaKey: key,
+      dedupKey: `dedup-${key}`,
+      thumb: "",
+      productUrl: `https://photos.google.com/photo/${key}`,
+      timestamp: 1_600_000_000_000 + i,
+      creationTimestamp: 1_700_000_000_000 + i,
+      resWidth: 1920,
+      resHeight: 1080,
+      fileName: `photo-${key}.jpg`,
+      isOwned: true
+    }
+  }
+  groups[0].originalMediaKey = "cap-group0-item0"
+
+  await injectScanResults(
+    context,
+    groups,
+    mediaItems,
+    Object.keys(mediaItems).length
+  )
+
+  const stub = await openGptkStubPage(context)
+  const page = await openAppTab(context, extensionId)
+
+  await expect(page.getByText("2 Duplicate Sets Ready")).toBeVisible({
+    timeout: 8_000
+  })
+
+  await page.getByRole("button", { name: "Skip all" }).click()
+  await page.locator('input[type="checkbox"]').first().click()
+  await page
+    .getByRole("button", { name: /Move \d+ to Trash/i })
+    .click()
+  await confirmTrashDialog(page, 10)
+  await expect(page.getByText(/moved to trash/i)).toBeVisible({
+    timeout: 10_000
+  })
+
+  await page.getByRole("button", { name: "Include all" }).click()
+  await page
+    .getByRole("button", { name: /Move \d+ to Trash/i })
+    .click()
+
+  await expect(page.getByRole("dialog")).toBeVisible()
+  await expect(
+    page.getByText(/You have 0 remaining and selected 1/i)
+  ).toBeVisible()
+  await expect(page.getByLabel("Type 1 to confirm")).not.toBeVisible()
+
+  await stub.close()
+  await page.close()
+})
+
 // ============================================================
 // Trash: multi-batch (> 25 items)
 // ============================================================
 
 test("shows trashing state for multi-batch trash (> 25 items)", async () => {
   await clearStorage(context)
+  await injectEntitlement(context, "lifetime")
 
   // 3 groups x 101 items -> 300 dedupKeys to trash across multiple 25-item batches
   const { groups, mediaItems } = makeGroups(3, 101)
@@ -147,7 +209,7 @@ test("shows trashing state for multi-batch trash (> 25 items)", async () => {
   })
 
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
   await expect(page.getByRole("dialog")).toBeVisible()
   await confirmTrashDialog(page, 300)
@@ -187,7 +249,7 @@ test("undo restores all groups to the UI", async () => {
 
   // Trash all groups
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
   await confirmTrashDialog(page, 3)
   await expect(page.getByText(/moved to trash/i)).toBeVisible({
@@ -215,6 +277,7 @@ test("undo restores all groups to the UI", async () => {
 
 test("undo after multi-batch trash restores all groups", async () => {
   await clearStorage(context)
+  await injectEntitlement(context, "lifetime")
 
   const { groups, mediaItems } = makeGroups(3, 101) // 303 dedupKeys
   await injectScanResults(
@@ -232,7 +295,7 @@ test("undo after multi-batch trash restores all groups", async () => {
   })
 
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
   await confirmTrashDialog(page, 300)
   await expect(page.getByText(/moved to trash/i)).toBeVisible({
@@ -270,7 +333,7 @@ test("shows a retryable warning when restore undo fails", async () => {
   })
 
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
   await confirmTrashDialog(page, 3)
   await expect(page.getByText(/moved to trash/i)).toBeVisible({
@@ -320,7 +383,7 @@ test("shows error state when trashItems fails", async () => {
   })
 
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
   await confirmTrashDialog(page, 3)
 
@@ -366,7 +429,7 @@ test("keeps failed items visible and reports partial trash results", async () =>
   })
 
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
   await confirmTrashDialog(page, 3)
 
@@ -427,7 +490,7 @@ test("cancel dialog does not trigger trash", async () => {
   })
 
   await page
-    .getByRole("button", { name: /Move \d+ Duplicates? to Trash/i })
+    .getByRole("button", { name: /Move \d+ to Trash/i })
     .click()
   await expect(page.getByRole("dialog")).toBeVisible()
 

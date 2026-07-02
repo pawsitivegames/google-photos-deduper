@@ -174,17 +174,20 @@ Recommended launch pricing:
 | Plan | Price | Purpose |
 | --- | ---: | --- |
 | Free | $0 | Prove trust and show value |
-| Cleanup Pass | $9 for 7 days | Convert one-time cleanup users |
-| Pro Annual | $19/year | Pay for maintenance and provider breakage fixes |
-| Pro Lifetime | $29-$39 | Best consumer-friendly anchor |
+| Mini Cleanup | $2.99 | Convert small one-session cleanup users |
+| Cleanup Pass | $4.99 for 7 days | Convert one-time large cleanup users |
+| Lifetime Early Access | $14.99 | Best consumer-friendly launch anchor |
 
 Recommended first launch:
 
 - Free tier
-- $9 Cleanup Pass
-- $29 Lifetime Pro
+- $2.99 Mini Cleanup
+- $4.99 Cleanup Pass
+- $14.99 Lifetime Early Access
 
-Add annual pricing later if support/update burden is high.
+Add annual pricing only after support/update burden and recurring usage are
+proven. Launch paid claims for Google Photos, iCloud Photos, and Amazon Photos
+only after each provider has current live Trash/Restore evidence.
 
 ### Free Tier
 
@@ -192,7 +195,7 @@ Free users should experience the full trust model, but with scale limits.
 
 Include:
 
-- Scan up to 1,000 photos or 25 duplicate groups.
+- Scan up to 1,000 photos and show 25 duplicate groups.
 - Show estimated duplicates and recoverable storage.
 - Review duplicate groups.
 - Export sample report.
@@ -205,22 +208,26 @@ Limit:
 - Bulk Trash.
 - Advanced keep rules.
 - Large-library resume.
-- Multi-provider cleanup.
+- Paid-scale cleanup beyond the free limits.
 
-### Pro Tier
+### Paid Tiers
 
 Unlock:
 
-- Unlimited scan size.
-- Full-library scan.
-- Batch cleanup.
+- Mini Cleanup: 2,500-photo scans, 75 visible groups, and 100 Trash moves.
+- Cleanup Pass: 10,000-photo sessions, full reports, full scan, and large resume for 7 days.
+- Lifetime Early Access: unlimited Google Photos, iCloud Photos, and Amazon
+  Photos workflows for early users.
 - Advanced scan modes.
 - Similar-photo sensitivity controls.
 - Smart keep strategy.
 - CSV/JSON reports.
 - Checkpoint/resume.
-- iCloud Photos and Amazon Photos when stable.
 - Priority fixes for provider UI breakages.
+
+Use the same free and paid limits for Google Photos, iCloud Photos, and Amazon
+Photos. Keep provider-specific caveats tied to current validation evidence, not
+to separate pricing rules.
 
 Do not gate:
 
@@ -236,7 +243,7 @@ Chrome Web Store native payments are deprecated, so monetization should use an e
 
 Recommended path:
 
-1. Use ExtensionPay or Stripe Checkout for the first paid launch.
+1. Use Stripe Checkout and the signed license API for the first paid launch.
 2. Store only entitlement state and purchase metadata needed for licensing.
 3. Keep duplicate detection local.
 4. Cache entitlement locally with periodic refresh.
@@ -435,7 +442,7 @@ Tasks:
 - Add entitlement system.
 - Add free scan cap.
 - Add upgrade prompt after duplicate estimate.
-- Add Cleanup Pass and Lifetime Pro.
+- Add Mini Cleanup, Cleanup Pass, and Lifetime Early Access.
 - Add refund policy.
 - Add license recovery.
 
@@ -482,7 +489,8 @@ Body:
 
 Buttons:
 
-- Unlock Pro
+- Lifetime Early Access
+- Mini Cleanup
 - Get 7-Day Cleanup Pass
 - Keep Reviewing Free Results
 
@@ -578,7 +586,7 @@ Do not track:
 | Store review flags privacy concerns | Publishing delays | Strong privacy policy and minimal permissions explanation |
 | Open-source forks bypass payment | Revenue leakage | Monetize signed releases, updates, support, convenience |
 | False positives | Trust loss | Conservative defaults, exact/similar separation, review-first |
-| Users only need one cleanup | Subscription resistance | Offer 7-day Cleanup Pass and Lifetime Pro |
+| Users only need one cleanup | Subscription resistance | Offer Mini Cleanup, 7-day Cleanup Pass, and Lifetime Early Access |
 
 ## Recommended Next Steps
 
@@ -586,7 +594,7 @@ Do not track:
 2. Create a simple landing page with the hero, privacy, safety, and pricing sections.
 3. Add in-app storage-savings estimate before the upgrade screen.
 4. Add a free scan cap that proves value without giving away full cleanup.
-5. Add ExtensionPay or Stripe entitlement handling.
+5. Add Stripe Checkout and signed entitlement handling.
 6. Publish privacy policy and support page before Chrome Web Store submission.
 7. Rename only after provider-neutral copy is ready, so the brand feels intentional.
 

@@ -338,11 +338,11 @@ test("migrates untouched old smart defaults to full scan", async () => {
   const page = await openAppTab(context, extensionId)
   await page.getByRole("button", { name: /More options/i }).click()
 
-  await expect(page.getByRole("button", { name: /^Full$/i })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: /^Smart$/i })).toHaveAttribute(
     "aria-pressed",
     "true"
   )
-  await expect(page.getByText(/Match sensitivity:/i)).toContainText("0.95")
+  await expect(page.getByText(/Sensitivity:/i)).toContainText("0.95")
 
   await page.close()
   await gpPage.close()
@@ -372,11 +372,11 @@ test("preserves intentional strict similarity settings", async () => {
   const page = await openAppTab(context, extensionId)
   await page.getByRole("button", { name: /More options/i }).click()
 
-  await expect(page.getByRole("button", { name: /^Full$/i })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: /^Smart$/i })).toHaveAttribute(
     "aria-pressed",
     "true"
   )
-  await expect(page.getByText(/Match sensitivity:/i)).toContainText("0.99")
+  await expect(page.getByText(/Sensitivity:/i)).toContainText("0.99")
 
   await page.close()
   await gpPage.close()
@@ -811,7 +811,7 @@ test("persists trash-all copy choices through page reload", async () => {
 
   await page.getByRole("button", { name: /Trash all copies/i }).click()
   await expect(
-    page.getByRole("button", { name: /Move 2 Duplicates to Trash/i })
+    page.getByRole("button", { name: /Move 2 to Trash/i })
   ).toBeVisible()
   await expect(page.locator(".MuiCard-root").nth(0)).toContainText("Will trash")
   await expect(page.locator(".MuiCard-root").nth(1)).toContainText("Will trash")
@@ -836,7 +836,7 @@ test("persists trash-all copy choices through page reload", async () => {
     timeout: 5000
   })
   await expect(
-    page.getByRole("button", { name: /Move 2 Duplicates to Trash/i })
+    page.getByRole("button", { name: /Move 2 to Trash/i })
   ).toBeVisible()
   await expect(page.locator(".MuiCard-root").nth(0)).toContainText("Will trash")
   await expect(page.locator(".MuiCard-root").nth(1)).toContainText("Will trash")
@@ -867,10 +867,10 @@ test("ignores stale kept override keys from saved selections", async () => {
     timeout: 5000
   })
   await expect(
-    page.getByRole("button", { name: /Move 1 Duplicate to Trash/i })
+    page.getByRole("button", { name: /Move 1 to Trash/i })
   ).toBeVisible()
   await expect(
-    page.getByRole("button", { name: /Move 2 Duplicates to Trash/i })
+    page.getByRole("button", { name: /Move 2 to Trash/i })
   ).not.toBeVisible()
 
   const sw = context.serviceWorkers()[0]
@@ -932,7 +932,7 @@ test("ignores malformed saved selections without crashing on load", async () => 
     timeout: 5000
   })
   await expect(
-    page.getByRole("button", { name: /Move 1 Duplicate to Trash/i })
+    page.getByRole("button", { name: /Move 1 to Trash/i })
   ).not.toBeVisible()
 
   await page.close()

@@ -11,6 +11,7 @@ import {
   type Page
 } from "@playwright/test"
 
+import type { PlanId } from "../../../lib/entitlement"
 import type { ScanCheckpoint } from "../../../lib/scan-checkpoint"
 import type { DuplicateGroup, GpdMediaItem } from "../../../lib/types"
 
@@ -233,6 +234,29 @@ export async function injectScanCheckpoint(
         chrome.storage.local.set({ scanCheckpoint }, resolve)
       }),
     scanCheckpoint
+  )
+}
+
+export async function injectEntitlement(
+  context: BrowserContext,
+  planId: Exclude<PlanId, "free">
+): Promise<void> {
+  const sw = context.serviceWorkers()[0]
+  await sw.evaluate(
+    (planId) =>
+      new Promise<void>((resolve) => {
+        chrome.storage.local.set(
+          {
+            photoSweepDevEntitlement: {
+              planId,
+              active: true,
+              source: "local_dev"
+            }
+          },
+          resolve
+        )
+      }),
+    planId
   )
 }
 

@@ -2,6 +2,7 @@ import "@fontsource/dm-sans/400.css"
 import "@fontsource/dm-sans/500.css"
 import "@fontsource/dm-sans/700.css"
 
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded"
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded"
 import CloseIcon from "@mui/icons-material/Close"
 import CollectionsRoundedIcon from "@mui/icons-material/CollectionsRounded"
@@ -13,7 +14,6 @@ import PhotoLibraryRoundedIcon from "@mui/icons-material/PhotoLibraryRounded"
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded"
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded"
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded"
-import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded"
 import Alert from "@mui/material/Alert"
 import AppBar from "@mui/material/AppBar"
 import Box from "@mui/material/Box"
@@ -54,10 +54,14 @@ import type { ReviewFilter } from "../components/ActionBar"
 import { DuplicateGroups } from "../components/DuplicateGroups"
 import { ScanConfig } from "../components/ScanConfig"
 import { ScanProgress } from "../components/ScanProgress"
+import {
+  UpgradeDialog,
+  type UpgradeReason
+} from "../components/UpgradeDialog"
 import { appReducer } from "../lib/app-reducer"
 import type { AppAction, AppState } from "../lib/app-reducer"
-import { buildCacheDiagnosticsReport } from "../lib/cache-diagnostics"
 import { debug } from "../lib/debug"
+import { usePrefersReducedMotion } from "../lib/use-prefers-reduced-motion"
 import { buildDeleteReport, type DeleteReport } from "../lib/delete-report"
 import { classifyDuplicateGroup } from "../lib/duplicate-classifier"
 import {
@@ -67,7 +71,34 @@ import {
 } from "../lib/duplicate-detector"
 import type { DetectionProgress } from "../lib/duplicate-detector"
 import { EmbeddingCache } from "../lib/embedding-cache"
+import {
+  canExportFullReport,
+  canResumeCheckpoint,
+  canTrashCount,
+  getEffectivePlanId,
+  getEstimatedScanCount,
+  getLockedGroupCount,
+  getPlanLimits,
+  getScanGate,
+  getVisibleGroups,
+  limitScanItems,
+  PLAN_LABELS,
+  type Entitlement,
+  type PlanId
+} from "../lib/entitlement"
 import { chooseKeepKeyForGroup, type KeepStrategy } from "../lib/keep-strategy"
+import {
+  getEffectiveLicenseApiBaseUrl,
+  LICENSE_API_BASE_STORAGE_KEY,
+  LicenseClient,
+  loadStoredEntitlement,
+  saveVerifiedEntitlementToken
+} from "../lib/license-client"
+import {
+  countBucket,
+  sendPrivacySafeAnalyticsEvent,
+  type PrivacySafeAnalyticsEvent
+} from "../lib/privacy-analytics"
 import { buildReviewReport, reviewReportToCsv } from "../lib/review-report"
 import {
   canResumeScanCheckpoint,
@@ -81,6 +112,7 @@ import {
 } from "../lib/scan-checkpoint"
 import { ScanLogger } from "../lib/scan-log"
 import { areScanResultsValid } from "../lib/scan-results"
+import { buildSupportDiagnosticsReport } from "../lib/support-diagnostics"
 import theme, { photoSweepColors } from "../lib/theme"
 import {
   buildTrashResultReport,
@@ -393,12 +425,38 @@ function providerLabel(provider: ScanSettings["sourceProvider"]): string {
   return "Google Photos"
 }
 
+const AMAZON_PHOTOS_HOSTS = new Set([
+  "www.amazon.com",
+  "www.amazon.ca",
+  "www.amazon.co.uk",
+  "www.amazon.de",
+  "www.amazon.fr",
+  "www.amazon.it",
+  "www.amazon.es",
+  "www.amazon.co.jp",
+  "www.amazon.com.au",
+  "www.amazon.in",
+  "www.amazon.com.br",
+  "www.amazon.com.mx",
+  "www.amazon.nl",
+  "www.amazon.sg",
+  "www.amazon.ae",
+  "www.amazon.sa",
+  "www.amazon.se",
+  "www.amazon.pl",
+  "www.amazon.com.tr",
+  "www.amazon.be",
+  "www.amazon.eg"
+])
+
 function providerFromTabUrl(url: string | undefined): PhotoProvider | null {
   if (!url) return null
   try {
     const parsed = new URL(url)
-    if (parsed.hostname === "www.icloud.com") return "icloud"
-    if (parsed.hostname === "www.amazon.ca") return "amazon"
+    if (["www.icloud.com", "www.icloud.com.cn"].includes(parsed.hostname)) {
+      return "icloud"
+    }
+    if (AMAZON_PHOTOS_HOSTS.has(parsed.hostname)) return "amazon"
     if (parsed.hostname === "photos.google.com") return "google"
   } catch {
     return null
@@ -476,10 +534,10 @@ function SidePanelConnectionSetup({
         <Box
           sx={{
             border: "1px solid",
-            borderColor: "divider",
+            borderColor: photoSweepColors.border,
             borderRadius: 2,
             p: 0.5,
-            bgcolor: "#FAFBFD"
+            bgcolor: photoSweepColors.surfaceSoft
           }}>
           <Button
             size="small"
@@ -501,9 +559,9 @@ function SidePanelConnectionSetup({
             alignItems: "center",
             gap: 1,
             border: "1px solid",
-            borderColor: "info.light",
+            borderColor: photoSweepColors.primaryBorder,
             borderRadius: 2,
-            bgcolor: "#EEF8FF",
+            bgcolor: photoSweepColors.primarySoft,
             px: 1.25,
             py: 1
           }}>
@@ -554,7 +612,7 @@ function SidePanelTimelineProgress({ steps }: { steps: SidePanelStepItem[] }) {
           ? photoSweepColors.success
           : isActive
             ? photoSweepColors.primary
-            : "#8B95A3"
+            : photoSweepColors.muted
         const statusLabel = isComplete
           ? "Done"
           : isActive
@@ -666,13 +724,13 @@ function SidePanelTimelineStep({
     <Box
       sx={{
         minWidth: 0,
-          border: "1px solid",
-          borderColor: photoSweepColors.primaryBorder,
-          borderRadius: 2.25,
-          bgcolor: photoSweepColors.surface,
-          boxShadow: `0 14px 36px ${photoSweepColors.shadow}`,
-          overflow: "hidden"
-        }}>
+        border: "1px solid",
+        borderColor: photoSweepColors.primaryBorder,
+        borderRadius: 2.25,
+        bgcolor: photoSweepColors.surface,
+        boxShadow: `0 14px 36px ${photoSweepColors.shadow}`,
+        overflow: "hidden"
+      }}>
       <Box
         sx={{
           px: 1.15,
@@ -698,6 +756,7 @@ function SidePanelTimelineStep({
       <Box
         sx={{
           px: 0.95,
+          pt: 0.95,
           pb: 0.95,
           display: "grid",
           gap: 0.85,
@@ -800,7 +859,9 @@ function SidePanelSourceBar({
             width: 7,
             height: 7,
             borderRadius: "50%",
-            bgcolor: connected ? photoSweepColors.success : photoSweepColors.muted,
+            bgcolor: connected
+              ? photoSweepColors.success
+              : photoSweepColors.muted,
             flexShrink: 0
           }}
         />
@@ -982,7 +1043,9 @@ function normalizeStoredSettings(settings: ScanSettings): ScanSettings {
 
   return {
     ...settings,
-    sourceProvider: settings.sourceProvider ?? "google"
+    sourceProvider: settings.sourceProvider ?? "google",
+    exactOnly: settings.exactOnly ?? false,
+    protectFavorites: settings.protectFavorites ?? true
   }
 }
 
@@ -1005,6 +1068,50 @@ function clearResumeCheckpointState(params: {
   params.checkpointRef.current = null
   params.setResumeCheckpoint(null)
   void clearScanCheckpoint()
+}
+
+function isFavoriteProtected(
+  item: GpdMediaItem | undefined,
+  settings: ScanSettings
+): boolean {
+  return settings.protectFavorites !== false && item?.isFavorite === true
+}
+
+function protectedKeepKeysForGroup(
+  group: DuplicateGroup,
+  mediaItems: Record<string, GpdMediaItem>,
+  settings: ScanSettings
+): Set<string> {
+  const protectedKeys = group.mediaKeys.filter((key) =>
+    isFavoriteProtected(mediaItems[key], settings)
+  )
+  return new Set(protectedKeys)
+}
+
+function filterGroupsForSafety(
+  groups: DuplicateGroup[],
+  mediaItems: Record<string, GpdMediaItem>,
+  settings: ScanSettings
+): DuplicateGroup[] {
+  if (!settings.exactOnly) return groups
+  return groups.filter((group) => {
+    const kind =
+      group.duplicateKind ?? classifyDuplicateGroup(group, mediaItems).duplicateKind
+    return kind === "exact"
+  })
+}
+
+function formatStorageBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  const digits = unit <= 1 || value >= 10 ? 0 : 1
+  return `${value.toFixed(digits)} ${units[unit]}`
 }
 
 type PendingSelections = {
@@ -1039,7 +1146,15 @@ function deserializeStoredSelections(value: unknown): PendingSelections | null {
   }
 }
 
+type IcloudAssetRef = {
+  recordName: string
+  changeTag: string
+  zoneName: string
+  ownerRecordName: string
+}
+
 type UndoData = {
+  provider: PhotoProvider
   dedupKeys: string[]
   count: number
   snapshot: {
@@ -1047,6 +1162,9 @@ type UndoData = {
     groups: DuplicateGroup[]
     totalItems: number
   }
+  // iCloud only: post-trash asset refs (fresh changeTags) so the Undo recover
+  // can issue records/modify without a re-scan.
+  icloudAssetRefs?: IcloudAssetRef[]
 }
 
 // ============================================================
@@ -1084,6 +1202,7 @@ export default function App() {
   } | null>(null)
   const [trashConfirmCount, setTrashConfirmCount] = useState("")
   const [trashWarning, setTrashWarning] = useState<string | null>(null)
+  const [trashMovesThisSession, setTrashMovesThisSession] = useState(0)
   const [reportError, setReportError] = useState<string | null>(null)
   const [cacheEntryCount, setCacheEntryCount] = useState<number | null>(null)
   const [cacheStatus, setCacheStatus] = useState<string | undefined>()
@@ -1096,9 +1215,180 @@ export default function App() {
   const [albumsError, setAlbumsError] = useState<string | null>(null)
   const [accountValidationComplete, setAccountValidationComplete] =
     useState(false)
+  const [entitlement, setEntitlement] = useState<Entitlement>({
+    planId: "free",
+    active: true,
+    source: "none"
+  })
+  const [entitlementLoaded, setEntitlementLoaded] = useState(false)
+  const [upgradePrompt, setUpgradePrompt] = useState<{
+    reason: UpgradeReason
+    detail?: string
+  } | null>(null)
+  const [licenseApiBaseUrl, setLicenseApiBaseUrl] = useState<
+    string | undefined
+  >()
+  const appOpenedTrackedRef = useRef(false)
 
   // Undo trash state: stored after a successful trash operation
   const [undoData, setUndoData] = useState<UndoData | null>(null)
+  const prefersReducedMotion = usePrefersReducedMotion()
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      loadStoredEntitlement(),
+      chrome.storage.local.get(LICENSE_API_BASE_STORAGE_KEY)
+    ])
+      .then(([stored, licenseConfig]) => {
+        if (cancelled) return
+        setEntitlement(stored.entitlement)
+        setLicenseApiBaseUrl(
+          getEffectiveLicenseApiBaseUrl(
+            licenseConfig[LICENSE_API_BASE_STORAGE_KEY] as string | undefined
+          )
+        )
+        setEntitlementLoaded(true)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEntitlement({ planId: "free", active: true, source: "none" })
+          setLicenseApiBaseUrl(getEffectiveLicenseApiBaseUrl())
+          setEntitlementLoaded(true)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const openUpgradePrompt = useCallback(
+    (reason: UpgradeReason, detail?: string) => {
+      setUpgradePrompt({ reason, detail })
+    },
+    []
+  )
+
+  const trackEvent = useCallback(
+    (event: PrivacySafeAnalyticsEvent) => {
+      const safeEvent = {
+        ...event,
+        provider: event.provider ?? settingsRef.current.sourceProvider ?? "google",
+        scanMode: event.scanMode ?? settingsRef.current.scanMode,
+        planId: event.planId ?? getEffectivePlanId(entitlement)
+      }
+      void sendPrivacySafeAnalyticsEvent(licenseApiBaseUrl, safeEvent).catch(() => {
+        // Analytics is optional; never interrupt scan, report, or Trash flows.
+      })
+    },
+    [entitlement, licenseApiBaseUrl]
+  )
+
+  useEffect(() => {
+    if (!entitlementLoaded) return
+    if (appOpenedTrackedRef.current) return
+    appOpenedTrackedRef.current = true
+    trackEvent({ name: "app_opened" })
+  }, [entitlementLoaded, trackEvent])
+
+  const openTrackedUpgradePrompt = useCallback(
+    (reason: UpgradeReason, detail?: string) => {
+      trackEvent({ name: "upgrade_prompt_shown" })
+      openUpgradePrompt(reason, detail)
+    },
+    [openUpgradePrompt, trackEvent]
+  )
+
+  const handleRefreshEntitlement = useCallback(async () => {
+    const client = new LicenseClient({ apiBaseUrl: licenseApiBaseUrl })
+    if (!client.isConfigured()) {
+      setTrashWarning(
+        "License refresh is not configured yet. Paid access will unlock once the Stripe license API is connected."
+      )
+      return
+    }
+    try {
+      const token = await client.fetchEntitlementToken()
+      const stored = await saveVerifiedEntitlementToken(token)
+      setEntitlement(stored.entitlement)
+      setEntitlementLoaded(true)
+      trackEvent({
+        name: "entitlement_refreshed",
+        planId: getEffectivePlanId(stored.entitlement)
+      })
+      const refreshedPlanId = getEffectivePlanId(stored.entitlement)
+      setTrashWarning(
+        refreshedPlanId === "free"
+          ? "No active paid license was found for this browser session."
+          : `${PLAN_LABELS[refreshedPlanId]} is active.`
+      )
+      setUpgradePrompt(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setTrashWarning(`Could not refresh license: ${message}`)
+    }
+  }, [licenseApiBaseUrl, trackEvent])
+
+  const refreshTimeLimitedEntitlementForAction = useCallback(async () => {
+    if (getEffectivePlanId(entitlement) !== "cleanup_pass") return entitlement
+    const client = new LicenseClient({ apiBaseUrl: licenseApiBaseUrl })
+    if (!client.isConfigured()) {
+      setTrashWarning(
+        "Cleanup Pass needs an online license refresh before paid actions. Connect to the internet and refresh your license."
+      )
+      return null
+    }
+    try {
+      const token = await client.fetchEntitlementToken()
+      const stored = await saveVerifiedEntitlementToken(token)
+      setEntitlement(stored.entitlement)
+      setEntitlementLoaded(true)
+      return stored.entitlement
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setTrashWarning(`Could not refresh Cleanup Pass: ${message}`)
+      return null
+    }
+  }, [entitlement, licenseApiBaseUrl])
+
+  const handleChooseUpgradePlan = useCallback(
+    async (planId: Exclude<PlanId, "free">) => {
+      const client = new LicenseClient({ apiBaseUrl: licenseApiBaseUrl })
+      if (!client.isConfigured()) {
+        setTrashWarning(
+          `${PLAN_LABELS[planId]} checkout is not configured yet. The extension is enforcing free limits until the Stripe license API is connected.`
+        )
+        setUpgradePrompt(null)
+        return
+      }
+      try {
+        const checkout = await client.createCheckout(planId)
+        trackEvent({ name: "checkout_started", planId })
+        await chrome.tabs.create({ url: checkout.url })
+        setTrashWarning(
+          "Checkout opened in a new tab. After payment, return here and refresh your license."
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setTrashWarning(`Could not start checkout: ${message}`)
+      }
+    },
+    [licenseApiBaseUrl, trackEvent]
+  )
+
+  const handleRecoverLicense = useCallback(
+    async (email: string) => {
+      const client = new LicenseClient({ apiBaseUrl: licenseApiBaseUrl })
+      if (!client.isConfigured()) {
+        throw new Error(
+          "License recovery is not configured until the Stripe license API is connected."
+        )
+      }
+      await client.recoverLicense(email)
+      trackEvent({ name: "entitlement_refreshed" })
+    },
+    [licenseApiBaseUrl, trackEvent]
+  )
 
   // Refs to capture pre-trash data for undo
   const preTrashSnapshotRef = useRef<{
@@ -1134,8 +1424,12 @@ export default function App() {
   const sidePanelHostProviderRef = useRef<PhotoProvider | null>(null)
   const sidePanelHostTabIdRef = useRef<number | null>(null)
 
-  // Holds selections loaded from storage; applied once when groups first load
+  // Holds selections loaded from storage; applied once when groups first load.
   const pendingSelectionsRef = useRef<PendingSelections | null>(null)
+  // Fresh scans may auto-select all found groups for quick review. Mutations
+  // like trash/undo must not auto-select newly remaining groups, because that
+  // can turn a safe dummy-only action into a dangerous real-photo selection.
+  const autoSelectNextResultsRef = useRef(false)
 
   const refreshEmbeddingCacheCount = useCallback(async () => {
     let cache: EmbeddingCache | null = null
@@ -1326,9 +1620,26 @@ export default function App() {
           }
         })
       }
-    } else {
+    } else if (autoSelectNextResultsRef.current) {
+      autoSelectNextResultsRef.current = false
       setSelectedGroupIds(new Set(groups.map((g) => g.id)))
       setKeptOverrides({})
+    } else {
+      const validGroups = new Map(groups.map((group) => [group.id, group]))
+      setSelectedGroupIds((prev) =>
+        new Set([...prev].filter((id) => validGroups.has(id)))
+      )
+      setKeptOverrides((prev) => {
+        const filtered: Record<string, Set<string>> = {}
+        for (const [id, keys] of Object.entries(prev)) {
+          const group = validGroups.get(id)
+          if (!group) continue
+          const validKeys = new Set(group.mediaKeys)
+          const kept = [...keys].filter((key) => validKeys.has(key))
+          if (keys.size === 0 || kept.length > 0) filtered[id] = new Set(kept)
+        }
+        return filtered
+      })
     }
   }, [groups])
 
@@ -1542,7 +1853,7 @@ export default function App() {
                 const providerName = providerLabel(sourceProvider)
                 const error =
                   sourceProvider === "amazon"
-                    ? `No ${providerName} items were found. Open amazon.ca/photos?sf=1, sign in, leave the Amazon Photos tab open, then scan again.`
+                    ? `No ${providerName} items were found. Open Amazon Photos on your Amazon country site, sign in, leave the tab open, then scan again.`
                     : `No loaded ${providerName} items were found. Open ${providerName}, wait for thumbnails to appear, scroll the library to load photos, then scan again.`
                 patchScanCheckpoint({
                   status: "error",
@@ -1554,7 +1865,17 @@ export default function App() {
                   type: "SCAN_ERROR",
                   error
                 })
+                trackEvent({ name: "error", errorCategory: "scan" })
                 break
+              }
+              const limited = limitScanItems(items, entitlement)
+              if (limited.lockedItemCount > 0) {
+                const effectivePlanId = getEffectivePlanId(entitlement)
+                openTrackedUpgradePrompt(
+                  "scan",
+                  `Scanned the first ${limited.items.length.toLocaleString()} items for ${PLAN_LABELS[effectivePlanId]}. Upgrade to check the remaining ${limited.lockedItemCount.toLocaleString()} items.`
+                )
+                items = limited.items
               }
               dispatch({
                 type: "SCAN_MEDIA_FETCHED",
@@ -1579,6 +1900,7 @@ export default function App() {
                 error: result.error || "Scan failed",
                 message: result.error || "Scan failed"
               })
+              trackEvent({ name: "error", errorCategory: "scan" })
               setResumeCheckpoint(scanCheckpointRef.current)
               dispatch({
                 type: "SCAN_ERROR",
@@ -1592,6 +1914,7 @@ export default function App() {
                   trashedDedupKeys?: string[]
                   trashedCount?: number
                   requestedCount?: number
+                  icloudAssetRefs?: IcloudAssetRef[]
                   dryRun?: boolean
                   message?: string
                   partial?: boolean
@@ -1617,6 +1940,10 @@ export default function App() {
               )
               if (data?.dryRun) {
                 dispatch({ type: "TRASH_COMPLETE", trashedKeys: [] })
+                trackEvent({
+                  name: "trash_completed",
+                  photoCountBucket: countBucket(0)
+                })
                 setTrashWarning(
                   data.message ||
                     `iCloud delete dry-run completed for ${(
@@ -1633,13 +1960,27 @@ export default function App() {
                 break
               }
               dispatch({ type: "TRASH_COMPLETE", trashedKeys })
+              setTrashMovesThisSession(
+                (count) => count + (trashedKeys.length || trashedDedupKeys.length)
+              )
+              trackEvent({
+                name: "trash_completed",
+                photoCountBucket: countBucket(
+                  trashedKeys.length || trashedDedupKeys.length
+                )
+              })
               // Set undo data from the snapshot captured before trash
               if (preTrashSnapshotRef.current && pendingDedupKeysRef.current) {
                 setUndoData({
                   dedupKeys: trashedDedupKeys,
+                  provider:
+                    preTrashSnapshotRef.current.mediaItems[trashedKeys[0]]?.provider ??
+                    settingsRef.current.sourceProvider ??
+                    "google",
                   count:
                     trashedKeys.length || pendingDedupKeysRef.current.length,
-                  snapshot: preTrashSnapshotRef.current
+                  snapshot: preTrashSnapshotRef.current,
+                  icloudAssetRefs: data?.icloudAssetRefs
                 })
               }
               preTrashSnapshotRef.current = null
@@ -1664,11 +2005,27 @@ export default function App() {
               )
               if (data?.partial && trashedKeys.length > 0) {
                 dispatch({ type: "TRASH_COMPLETE", trashedKeys })
+                setTrashMovesThisSession(
+                  (count) =>
+                    count + (trashedKeys.length || trashedDedupKeys.length)
+                )
+                trackEvent({
+                  name: "trash_completed",
+                  photoCountBucket: countBucket(
+                    trashedKeys.length || trashedDedupKeys.length
+                  ),
+                  errorCategory: "trash_partial"
+                })
                 if (preTrashSnapshotRef.current && trashedDedupKeys.length) {
                   setUndoData({
                     dedupKeys: trashedDedupKeys,
+                    provider:
+                      preTrashSnapshotRef.current.mediaItems[trashedKeys[0]]?.provider ??
+                      settingsRef.current.sourceProvider ??
+                      "google",
                     count: trashedDedupKeys.length,
-                    snapshot: preTrashSnapshotRef.current
+                    snapshot: preTrashSnapshotRef.current,
+                    icloudAssetRefs: data?.icloudAssetRefs
                   })
                 }
                 setTrashWarning(
@@ -1684,6 +2041,7 @@ export default function App() {
               preTrashSnapshotRef.current = null
               pendingDedupKeysRef.current = null
               pendingMediaKeysToTrashRef.current = null
+              trackEvent({ name: "error", errorCategory: "trash" })
               dispatch({
                 type: "TRASH_ERROR",
                 error: result.error || "Trash failed"
@@ -1710,7 +2068,10 @@ export default function App() {
         }
         case "gptkLog":
           if ((message as { level?: string }).level === "error") {
-            dispatch({ type: "GP_TAB_CLOSED" })
+            dispatch({
+              type: "GP_TAB_CLOSED",
+              provider: settingsRef.current.sourceProvider ?? "google"
+            })
           }
           break
         case "gptkProgress": {
@@ -1745,7 +2106,12 @@ export default function App() {
 
     chrome.runtime.onMessage.addListener(listener)
     return () => chrome.runtime.onMessage.removeListener(listener)
-  }, [patchScanCheckpoint, saveTrashResultReport])
+  }, [
+    entitlement,
+    openUpgradePrompt,
+    patchScanCheckpoint,
+    saveTrashResultReport
+  ])
 
   // Keep refs so async callbacks always see latest values
   const settingsRef = useRef(settings)
@@ -1763,6 +2129,14 @@ export default function App() {
       setSidePanelSourceConfirmed(true)
     }
   }, [state.status])
+
+  useEffect(() => {
+    if (!entitlementLoaded) return
+    const limits = getPlanLimits(entitlement)
+    if (!limits.fullScanMode && settings.scanMode === "full") {
+      setSettings({ scanMode: "smart" })
+    }
+  }, [entitlement, entitlementLoaded, settings.scanMode])
 
   // Run MediaPipe duplicate detection on fetched media items
   const runDuplicateDetection = useCallback(
@@ -1854,11 +2228,17 @@ export default function App() {
           }
         }
 
+        autoSelectNextResultsRef.current = true
         dispatch({
           type: "SCAN_COMPLETE",
           mediaItems: mediaItemMap,
           groups,
           totalItems: items.length
+        })
+        trackEvent({
+          name: "scan_completed",
+          photoCountBucket: countBucket(items.length),
+          duplicateGroupCountBucket: countBucket(groups.length)
         })
         refreshEmbeddingCacheCount()
         // Refresh account email after scan — the email in state may be stale
@@ -1896,6 +2276,7 @@ export default function App() {
             message: `Duplicate detection failed: ${error}`
           })
           setResumeCheckpoint(scanCheckpointRef.current)
+          trackEvent({ name: "error", errorCategory: "scan" })
           dispatch({
             type: "SCAN_ERROR",
             error: `Duplicate detection failed: ${error}`
@@ -1903,7 +2284,7 @@ export default function App() {
         }
       }
     },
-    [patchScanCheckpoint, refreshEmbeddingCacheCount, requestAlbums]
+    [patchScanCheckpoint, refreshEmbeddingCacheCount, requestAlbums, trackEvent]
   )
 
   // Health check on mount + recover any scan log entry orphaned by a page reload
@@ -2067,12 +2448,20 @@ export default function App() {
     [groups, groupClassificationById]
   )
   const similarGroupCount = groups.length - exactGroupCount
-  const visibleGroups = useMemo(() => {
+  const filteredGroups = useMemo(() => {
     if (reviewFilter === "all") return groups
     return groups.filter(
       (group) => groupClassificationById.get(group.id) === reviewFilter
     )
   }, [groups, groupClassificationById, reviewFilter])
+  const visibleGroups = useMemo(
+    () => getVisibleGroups(filteredGroups, entitlement),
+    [filteredGroups, entitlement]
+  )
+  const lockedGroupCount = useMemo(
+    () => getLockedGroupCount(filteredGroups, entitlement),
+    [filteredGroups, entitlement]
+  )
   const provisionalGroups = state.status === "scanning" ? groups : visibleGroups
 
   const handleSelectAll = useCallback(() => {
@@ -2127,25 +2516,63 @@ export default function App() {
     })
   }, [getKept, selectedGroupIds, visibleGroups])
 
-  const handleExportJson = useCallback(() => {
+  const handleExportJson = useCallback(async () => {
     const report = buildCurrentReviewReport()
     if (!report) return
+    const actionEntitlement = await refreshTimeLimitedEntitlementForAction()
+    if (!actionEntitlement) return
+    if (!canExportFullReport(actionEntitlement) && lockedGroupCount > 0) {
+      openTrackedUpgradePrompt(
+        "export",
+        `This free report includes ${visibleGroups.length.toLocaleString()} visible duplicate set${visibleGroups.length === 1 ? "" : "s"}. Upgrade for the full report.`
+      )
+    }
+    trackEvent({
+      name: "export_clicked",
+      duplicateGroupCountBucket: countBucket(visibleGroups.length)
+    })
     downloadTextFile({
       filename: `${report.reportId}.json`,
       contents: JSON.stringify(report, null, 2),
       type: "application/json"
     })
-  }, [buildCurrentReviewReport])
+  }, [
+    buildCurrentReviewReport,
+    lockedGroupCount,
+    openTrackedUpgradePrompt,
+    refreshTimeLimitedEntitlementForAction,
+    trackEvent,
+    visibleGroups.length
+  ])
 
-  const handleExportCsv = useCallback(() => {
+  const handleExportCsv = useCallback(async () => {
     const report = buildCurrentReviewReport()
     if (!report) return
+    const actionEntitlement = await refreshTimeLimitedEntitlementForAction()
+    if (!actionEntitlement) return
+    if (!canExportFullReport(actionEntitlement) && lockedGroupCount > 0) {
+      openTrackedUpgradePrompt(
+        "export",
+        `This free spreadsheet includes ${visibleGroups.length.toLocaleString()} visible duplicate set${visibleGroups.length === 1 ? "" : "s"}. Upgrade for the full report.`
+      )
+    }
+    trackEvent({
+      name: "export_clicked",
+      duplicateGroupCountBucket: countBucket(visibleGroups.length)
+    })
     downloadTextFile({
       filename: `${report.reportId}.csv`,
       contents: reviewReportToCsv(report),
       type: "text/csv"
     })
-  }, [buildCurrentReviewReport])
+  }, [
+    buildCurrentReviewReport,
+    lockedGroupCount,
+    openTrackedUpgradePrompt,
+    refreshTimeLimitedEntitlementForAction,
+    trackEvent,
+    visibleGroups.length
+  ])
 
   // Per-group kept sets: overridden groups use the live override Set (changes only for
   // the toggled group); unoverridden groups reuse the stable default Set from above so
@@ -2316,7 +2743,28 @@ export default function App() {
   const handleStartScan = useCallback(
     async (settingsOverride?: ScanSettings) => {
       const scanSettings = settingsOverride ?? settings
+      const estimatedCount = getEstimatedScanCount(scanSettings)
+      const actionEntitlement = await refreshTimeLimitedEntitlementForAction()
+      if (!actionEntitlement) return
+      const scanGate = getScanGate(scanSettings, estimatedCount, actionEntitlement)
+      if (!scanGate.allowed) {
+        openTrackedUpgradePrompt(
+          "scan",
+          scanGate.reason === "full_scan_locked"
+            ? "Full scan unlocks with Cleanup Pass or Lifetime Early Access."
+            : `This scan is above the ${scanGate.limit?.toLocaleString()} photo limit for ${PLAN_LABELS[getEffectivePlanId(actionEntitlement)]}.`
+        )
+        return
+      }
+      trackEvent({
+        name: "scan_started",
+        provider: scanSettings.sourceProvider ?? "google",
+        scanMode: scanSettings.scanMode,
+        photoCountBucket:
+          estimatedCount !== undefined ? countBucket(estimatedCount) : undefined
+      })
       settingsRef.current = scanSettings
+      setTrashMovesThisSession(0)
       if (settingsOverride) {
         setSettings(fullScanSettingsPatch(scanSettings))
         await chrome.storage.local.set({ settings: scanSettings })
@@ -2409,7 +2857,12 @@ export default function App() {
         }
       })
     },
-    [settings]
+    [
+      settings,
+      refreshTimeLimitedEntitlementForAction,
+      openTrackedUpgradePrompt,
+      trackEvent
+    ]
   )
 
   const clearEmbeddingCache = useCallback(async (): Promise<number | null> => {
@@ -2468,32 +2921,51 @@ export default function App() {
   }, [clearEmbeddingCache, handleStartScan, refreshEmbeddingCacheCount])
 
   const handleExportCacheDiagnostics = useCallback(async () => {
-    setCacheBusy(true)
     setCacheStatus(undefined)
-    let cache: EmbeddingCache | null = null
-    try {
-      cache = await EmbeddingCache.open()
-      const records = await cache.allRecords()
-      const report = buildCacheDiagnosticsReport(records)
-      downloadTextFile({
-        filename: `${report.reportId}.json`,
-        contents: JSON.stringify(report, null, 2),
-        type: "application/json"
-      })
-      setCacheStatus(
-        `Exported diagnostics for ${report.totalRecords.toLocaleString()} cached embedding${
-          report.totalRecords !== 1 ? "s" : ""
-        }.`
+    const currentState = stateRef.current
+    const provider = settingsRef.current.sourceProvider ?? "google"
+    const photoCount =
+      currentState.status === "results" || currentState.status === "trashing"
+        ? currentState.totalItems
+        : currentState.status === "scanning"
+          ? currentState.totalEstimate
+          : undefined
+    const duplicateGroupCount =
+      currentState.status === "results" || currentState.status === "trashing"
+        ? currentState.groups.length
+        : currentState.status === "scanning"
+          ? currentState.partialGroups?.length
+          : undefined
+    const report = buildSupportDiagnosticsReport({
+      version: chrome.runtime.getManifest().version,
+      provider,
+      scanMode: settingsRef.current.scanMode,
+      entitlement,
+      photoCountBucket:
+        photoCount !== undefined ? countBucket(photoCount) : undefined,
+      duplicateGroupCountBucket:
+        duplicateGroupCount !== undefined
+          ? countBucket(duplicateGroupCount)
+          : undefined,
+      errorCategory:
+        currentState.status === "disconnected"
+          ? "connection"
+          : reportError
+            ? "report"
+            : trashWarning
+              ? "trash"
+              : undefined,
+      recentLogs: [cacheStatus, reportError, trashWarning].filter(
+        (value): value is string => Boolean(value)
       )
-    } catch (error) {
-      setCacheStatus(
-        `Could not export cache diagnostics: ${error instanceof Error ? error.message : String(error)}`
-      )
-    } finally {
-      cache?.close()
-      setCacheBusy(false)
-    }
-  }, [])
+    })
+    downloadTextFile({
+      filename: `${report.reportId}.json`,
+      contents: JSON.stringify(report, null, 2),
+      type: "application/json"
+    })
+    setCacheStatus("Exported redacted support diagnostics.")
+  }, [cacheStatus, entitlement, reportError, trashWarning])
 
   const handleResumeScan = useCallback(() => {
     if (!resumeCheckpoint) return
@@ -2513,6 +2985,13 @@ export default function App() {
         checkpointRef: scanCheckpointRef,
         setResumeCheckpoint
       })
+      return
+    }
+    if (!canResumeCheckpoint(resumeCheckpoint, entitlement)) {
+      openTrackedUpgradePrompt(
+        "resume",
+        "This saved scan is above your current resume limit. Upgrade to resume large-library scans."
+      )
       return
     }
 
@@ -2558,7 +3037,13 @@ export default function App() {
       return
     }
     handleStartScan(resumeCheckpoint.settings)
-  }, [handleStartScan, resumeCheckpoint, runDuplicateDetection])
+  }, [
+    entitlement,
+    handleStartScan,
+    openTrackedUpgradePrompt,
+    resumeCheckpoint,
+    runDuplicateDetection
+  ])
 
   const handleDismissResume = useCallback(() => {
     setResumeCheckpoint(null)
@@ -2566,8 +3051,10 @@ export default function App() {
     void clearScanCheckpoint()
   }, [])
 
-  const handleTrash = useCallback(() => {
+  const handleTrash = useCallback(async () => {
     if (state.status !== "results") return
+    const actionEntitlement = await refreshTimeLimitedEntitlementForAction()
+    if (!actionEntitlement) return
     const unsupportedProvider = Object.values(state.mediaItems).find(
       (item) =>
         item.provider &&
@@ -2598,9 +3085,36 @@ export default function App() {
     }
 
     if (dedupKeys.length === 0) return
+    if (!canTrashCount(dedupKeys.length, actionEntitlement, trashMovesThisSession)) {
+      const limit = getPlanLimits(actionEntitlement).maxTrashMovesPerSession
+      const remaining =
+        limit === "unlimited"
+          ? "unlimited"
+          : Math.max(0, limit - trashMovesThisSession).toLocaleString()
+      openTrackedUpgradePrompt(
+        "trash",
+        `Your ${PLAN_LABELS[getEffectivePlanId(actionEntitlement)]} plan can move ${
+          limit === "unlimited" ? "unlimited" : limit.toLocaleString()
+        } item${limit === 1 ? "" : "s"} to Trash per session. You have ${remaining} remaining and selected ${dedupKeys.length.toLocaleString()}.`
+      )
+      return
+    }
+    trackEvent({
+      name: "trash_attempted",
+      photoCountBucket: countBucket(dedupKeys.length)
+    })
     setTrashConfirmCount("")
     setTrashConfirm({ dedupKeys, mediaKeysToTrash })
-  }, [state, selectedGroupIds, getKept, visibleGroups])
+  }, [
+    state,
+    selectedGroupIds,
+    getKept,
+    visibleGroups,
+    refreshTimeLimitedEntitlementForAction,
+    trashMovesThisSession,
+    openTrackedUpgradePrompt,
+    trackEvent
+  ])
 
   const handleCloseTrashConfirm = useCallback(() => {
     setTrashConfirm(null)
@@ -2657,6 +3171,13 @@ export default function App() {
       totalItems: state.totalItems
     })
 
+    // iCloud trash needs each item's CPLAsset ref (recordName + changeTag +
+    // zone) captured at scan time. Google/Amazon ignore this field.
+    const icloudAssetRefs =
+      trashProvider === "icloud"
+        ? mediaKeysToTrash.map((key) => state.mediaItems[key]?.icloudAsset)
+        : undefined
+
     sendToServiceWorker({
       app: APP_ID,
       action: "gptkCommand",
@@ -2666,11 +3187,11 @@ export default function App() {
       args: {
         dedupKeys,
         mediaKeysToTrash,
-        dryRun: trashProvider === "icloud",
         batchSize: TRASH_BATCH_SIZE,
         batchPauseMs: TRASH_BATCH_PAUSE_MS,
         retryCount: TRASH_RETRY_COUNT,
-        retryBackoffMs: TRASH_RETRY_BACKOFF_MS
+        retryBackoffMs: TRASH_RETRY_BACKOFF_MS,
+        ...(icloudAssetRefs ? { icloudAssetRefs } : {})
       }
     })
   }, [
@@ -2705,6 +3226,7 @@ export default function App() {
     scanCheckpointRef.current = null
     cachedMediaItemsRef.current = null
     pendingSelectionsRef.current = null
+    autoSelectNextResultsRef.current = false
     preTrashSnapshotRef.current = null
     pendingDedupKeysRef.current = null
     pendingMediaKeysToTrashRef.current = null
@@ -2716,6 +3238,7 @@ export default function App() {
     setTrashConfirm(null)
     setTrashConfirmCount("")
     setTrashWarning(null)
+    setTrashMovesThisSession(0)
     setReportError(null)
     setUndoData(null)
     void chrome.storage.local.remove([
@@ -2839,6 +3362,11 @@ export default function App() {
     const requestId = generateRequestId()
     pendingRestoreUndoRef.current = undoData
     pendingRestoreRequestIdRef.current = requestId
+    autoSelectNextResultsRef.current = false
+    pendingSelectionsRef.current = {
+      selectedGroupIds: new Set(),
+      keptOverrides: {}
+    }
     // Optimistically restore the UI to the pre-trash state
     dispatch({
       type: "RESTORE_SNAPSHOT",
@@ -2852,7 +3380,13 @@ export default function App() {
       action: "gptkCommand",
       command: "restoreItems",
       requestId,
-      args: { dedupKeys: undoData.dedupKeys }
+      provider: undoData.provider,
+      args: {
+        dedupKeys: undoData.dedupKeys,
+        ...(undoData.icloudAssetRefs
+          ? { icloudAssetRefs: undoData.icloudAssetRefs }
+          : {})
+      }
     })
     setUndoData(null)
     setTrashWarning(null)
@@ -2865,12 +3399,13 @@ export default function App() {
   // Fire confetti when trash completes
   useEffect(() => {
     if (!undoData) return
+    if (prefersReducedMotion) return
     confetti({
       particleCount: 200,
       spread: 100,
       origin: { y: 0.7 }
     })
-  }, [undoData])
+  }, [undoData, prefersReducedMotion])
 
   // Compute duplicate count for ActionBar
   const duplicateCount =
@@ -2969,7 +3504,8 @@ export default function App() {
     {
       index: 2,
       title: "Sign in",
-      description: "Open the provider tab, sign in, then verify the connection.",
+      description:
+        "Open the provider tab, sign in, then verify the connection.",
       status: sidePanelHasConnection
         ? "complete"
         : sourceStepComplete
@@ -3187,6 +3723,7 @@ export default function App() {
                   settings={settings}
                   onSettingsChange={setSettings}
                   onStartScan={handleStartScan}
+                  onOpenProvider={handleOpenProvider}
                   onResumeScan={handleResumeScan}
                   onDismissResume={handleDismissResume}
                   onClearCache={handleClearCache}
@@ -3201,6 +3738,8 @@ export default function App() {
                   albumsLoading={albumsLoading}
                   albumsError={albumsError}
                   onRefreshAlbums={() => requestAlbums(state.accountEmail)}
+                  entitlement={entitlement}
+                  onUpgrade={(detail) => openTrackedUpgradePrompt("scan", detail)}
                   compact
                 />
               )}
@@ -3231,6 +3770,7 @@ export default function App() {
                     totalEstimate={state.totalEstimate}
                     message={state.message}
                     onPause={handlePauseScan}
+                    compact
                   />
                   {provisionalGroups.length > 0 && (
                     <Alert severity="info" sx={{ py: 0.65 }}>
@@ -3289,6 +3829,13 @@ export default function App() {
                     onApplyKeepStrategy={handleApplyKeepStrategy}
                     compact
                   />
+                  {lockedGroupCount > 0 && (
+                    <Alert severity="info" sx={{ mb: 1, py: 0.65 }}>
+                      {lockedGroupCount.toLocaleString()} more duplicate set
+                      {lockedGroupCount === 1 ? "" : "s"} found. Upgrade to
+                      review and clean the full scan.
+                    </Alert>
+                  )}
                   <DuplicateGroups
                     groups={visibleGroups}
                     mediaItems={displayMediaItems}
@@ -3367,6 +3914,7 @@ export default function App() {
                   settings={settings}
                   onSettingsChange={setSettings}
                   onStartScan={handleStartScan}
+                  onOpenProvider={handleOpenProvider}
                   onResumeScan={handleResumeScan}
                   onDismissResume={handleDismissResume}
                   onClearCache={handleClearCache}
@@ -3381,6 +3929,8 @@ export default function App() {
                   albumsLoading={albumsLoading}
                   albumsError={albumsError}
                   onRefreshAlbums={() => requestAlbums(state.accountEmail)}
+                  entitlement={entitlement}
+                  onUpgrade={(detail) => openTrackedUpgradePrompt("scan", detail)}
                   compact={isSidePanel}
                 />
               )}
@@ -3461,6 +4011,13 @@ export default function App() {
                     onApplyKeepStrategy={handleApplyKeepStrategy}
                     compact={isSidePanel}
                   />
+                  {lockedGroupCount > 0 && (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      {lockedGroupCount.toLocaleString()} more duplicate set
+                      {lockedGroupCount === 1 ? "" : "s"} found. Upgrade to
+                      review and clean the full scan.
+                    </Alert>
+                  )}
                   <DuplicateGroups
                     groups={visibleGroups}
                     mediaItems={displayMediaItems}
@@ -3533,8 +4090,41 @@ export default function App() {
         )}
       </Box>
 
+      <UpgradeDialog
+        open={!!upgradePrompt}
+        reason={upgradePrompt?.reason ?? "groups"}
+        detail={upgradePrompt?.detail}
+        onClose={() => setUpgradePrompt(null)}
+        onChoosePlan={handleChooseUpgradePlan}
+        onRefreshLicense={handleRefreshEntitlement}
+        onRecoverLicense={handleRecoverLicense}
+      />
+
       {/* Trash confirm dialog */}
-      <Dialog open={!!trashConfirm} onClose={handleCloseTrashConfirm}>
+      <Dialog
+        open={!!trashConfirm}
+        onClose={handleCloseTrashConfirm}
+        fullWidth
+        maxWidth="xs"
+        slotProps={{
+          backdrop: {
+            sx: {
+              bgcolor: "rgba(23, 32, 28, 0.34)",
+              backdropFilter: "blur(3px)"
+            }
+          },
+          paper: {
+            sx: {
+              m: isSidePanel ? 1.5 : 3,
+              borderRadius: 2.5,
+              border: "1px solid",
+              borderColor: photoSweepColors.border,
+              bgcolor: photoSweepColors.surface,
+              backgroundColor: photoSweepColors.surface,
+              boxShadow: `0 24px 70px rgba(23, 32, 28, 0.22)`
+            }
+          }
+        }}>
         <DialogTitle>Move to Trash</DialogTitle>
         <DialogContent>
           {reportError && (

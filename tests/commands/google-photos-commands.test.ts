@@ -363,6 +363,67 @@ describe("getAllMediaItems — field mapping", () => {
     ])
     restore()
   })
+
+  it("fetches album media through the low-level page API when the GPTK helper is guarded", async () => {
+    ;(window as any).gptkApi = {
+      getItemsByUploadedDate: vi.fn()
+    }
+    ;(window as any).gptkApiUtils = {
+      api: {
+        ...mockApi,
+        getAlbumPage: vi
+          .fn()
+          .mockResolvedValueOnce({
+            items: [
+              {
+                mediaKey: "album-page-1",
+                dedupKey: "dk-album-page-1",
+                thumb: "https://thumb/album-page-1",
+                timestamp: Date.parse("2024-06-15T12:00:00.000Z"),
+                creationTimestamp: Date.parse("2024-06-16T00:00:00.000Z")
+              }
+            ],
+            nextPageId: "next"
+          })
+          .mockResolvedValueOnce({
+            items: [
+              {
+                mediaKey: "album-page-2",
+                dedupKey: "dk-album-page-2",
+                thumb: "https://thumb/album-page-2",
+                timestamp: Date.parse("2024-06-15T12:01:00.000Z"),
+                creationTimestamp: Date.parse("2024-06-16T00:01:00.000Z")
+              }
+            ],
+            nextPageId: null
+          })
+      },
+      getAllMediaInAlbum: vi.fn().mockResolvedValue([])
+    }
+
+    const { messages, restore } = collectMessages()
+    sendCommand("getAllMediaItems", "req-album-page-1", {
+      albumScope: { mediaKey: "album-key", title: "Tiny test album" }
+    })
+    await flush()
+
+    const getAlbumPage = (window as any).gptkApiUtils.api.getAlbumPage
+    expect(getAlbumPage).toHaveBeenCalledWith("album-key", null)
+    expect(getAlbumPage).toHaveBeenCalledWith("album-key", "next")
+    expect(
+      (window as any).gptkApiUtils.getAllMediaInAlbum
+    ).not.toHaveBeenCalled()
+
+    const result = messages.find(
+      (m: any) => m.action === "gptkResult" && m.command === "getAllMediaItems"
+    ) as any
+    expect(result?.success).toBe(true)
+    expect(result?.data.map((item: any) => item.mediaKey)).toEqual([
+      "album-page-1",
+      "album-page-2"
+    ])
+    restore()
+  })
 })
 
 describe("listAlbums", () => {
@@ -405,6 +466,58 @@ describe("listAlbums", () => {
         itemCount: 2,
         isShared: true
       }
+    ])
+    restore()
+  })
+
+  it("lists albums through the low-level page API when the GPTK helper is guarded", async () => {
+    ;(window as any).gptkApiUtils = {
+      api: {
+        ...mockApi,
+        getAlbums: vi
+          .fn()
+          .mockResolvedValueOnce({
+            items: [
+              {
+                mediaKey: "album-page-1",
+                title: "Tiny duplicate test",
+                itemCount: 3,
+                isShared: false
+              }
+            ],
+            nextPageId: "next"
+          })
+          .mockResolvedValueOnce({
+            items: [
+              {
+                mediaKey: "album-page-2",
+                title: "Older album",
+                itemCount: 2,
+                isShared: true
+              }
+            ],
+            nextPageId: null
+          })
+      },
+      getAllAlbums: vi.fn().mockResolvedValue([])
+    }
+
+    const { messages, restore } = collectMessages()
+    sendCommand("listAlbums", "req-albums-pages-1", {})
+    await flush()
+
+    const getAlbums = (window as any).gptkApiUtils.api.getAlbums
+    expect(getAlbums).toHaveBeenCalledWith(null)
+    expect(getAlbums).toHaveBeenCalledWith("next")
+    expect((window as any).gptkApiUtils.getAllAlbums).not.toHaveBeenCalled()
+
+    const result = messages.find(
+      (m: any) => m.action === "gptkResult" && m.command === "listAlbums"
+    ) as any
+    expect(result?.success).toBe(true)
+    expect(result?.data.map((album: any) => album.title)).toEqual([
+      "Tiny duplicate test",
+      "Older album"
     ])
     restore()
   })

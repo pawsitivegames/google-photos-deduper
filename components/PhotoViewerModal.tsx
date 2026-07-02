@@ -18,6 +18,7 @@ import Typography from "@mui/material/Typography"
 import { useCallback, useEffect, useState } from "react"
 
 import type { GpdMediaItem } from "../lib/types"
+import { usePrefersReducedMotion } from "../lib/use-prefers-reduced-motion"
 
 /**
  * Preloads full-res blob URLs for all items in the group as soon as the modal
@@ -241,6 +242,7 @@ export function PhotoViewerModal({
   const [index, setIndex] = useState(initialIndex)
   const [slideDir, setSlideDir] = useState<"forward" | "backward">("forward")
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const prefersReducedMotion = usePrefersReducedMotion()
 
   // Preload all images in the group up front
   const blobUrls = useGroupBlobUrls(items)
@@ -346,15 +348,27 @@ export function PhotoViewerModal({
       fullWidth
       maxWidth="lg"
       aria-label="Photo viewer"
-      PaperProps={{
-        sx: {
-          bgcolor: "rgba(17,17,17,0.96)",
-          color: "white",
-          position: "relative",
-          overflow: "hidden",
-          borderRadius: 3,
-          backdropFilter: "saturate(180%) blur(24px)",
-          boxShadow: "0 28px 90px rgba(0,0,0,0.42)"
+      slotProps={{
+        backdrop: {
+          sx: {
+            bgcolor: "rgba(0,0,0,0.48)",
+            backdropFilter: "blur(4px)"
+          }
+        },
+        paper: {
+          sx: {
+            width: { xs: "calc(100vw - 16px)", sm: "auto" },
+            maxHeight: { xs: "calc(100vh - 16px)", sm: "calc(100% - 64px)" },
+            m: { xs: 1, sm: 4 },
+            bgcolor: "#111111",
+            backgroundColor: "#111111",
+            color: "white",
+            position: "relative",
+            overflow: "hidden",
+            borderRadius: { xs: 2, sm: 3 },
+            backdropFilter: "saturate(180%) blur(24px)",
+            boxShadow: "0 28px 90px rgba(0,0,0,0.42)"
+          }
         }
       }}>
       {/* Header bar: filename left, counter center, close right */}
@@ -385,7 +399,9 @@ export function PhotoViewerModal({
               color: "white",
               textAlign: "center",
               letterSpacing: "0.05em",
-              animation: `${slideDir === "forward" ? slideInFromRight : slideInFromLeft} 150ms ease-out`
+              animation: prefersReducedMotion
+                ? "none"
+                : `${slideDir === "forward" ? slideInFromRight : slideInFromLeft} 150ms ease-out`
             }}>
             {safeIndex + 1} / {items.length}
           </Typography>
@@ -411,7 +427,8 @@ export function PhotoViewerModal({
           justifyContent: "center",
           position: "relative",
           bgcolor: "#111111",
-          height: "70vh",
+          height: { xs: "58vh", sm: "70vh" },
+          minHeight: { xs: 320, sm: 420 },
           overflow: "hidden"
         }}>
         {/* Previous */}

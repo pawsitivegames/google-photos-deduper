@@ -374,9 +374,39 @@ function mapAlbum(album) {
   }
 }
 
+async function fetchAllAlbums(apiUtils) {
+  const api = apiUtils?.api
+  if (api?.getAlbums) {
+    const albums = []
+    let nextPageId = null
+    do {
+      const page = await api.getAlbums(nextPageId)
+      if (page?.items?.length) albums.push(...page.items)
+      nextPageId = page?.nextPageId || null
+    } while (nextPageId)
+    return albums
+  }
+  return await apiUtils.getAllAlbums()
+}
+
+async function fetchAllMediaInAlbum(apiUtils, albumMediaKey) {
+  const api = apiUtils?.api
+  if (api?.getAlbumPage) {
+    const mediaItems = []
+    let nextPageId = null
+    do {
+      const page = await api.getAlbumPage(albumMediaKey, nextPageId)
+      if (page?.items?.length) mediaItems.push(...page.items)
+      nextPageId = page?.nextPageId || null
+    } while (nextPageId)
+    return mediaItems
+  }
+  return await apiUtils.getAllMediaInAlbum(albumMediaKey)
+}
+
 async function listAlbums(requestId) {
   const apiUtils = window.gptkApiUtils
-  if (!apiUtils?.getAllAlbums) {
+  if (!apiUtils?.getAllAlbums && !apiUtils?.api?.getAlbums) {
     postError(
       "listAlbums",
       requestId,
@@ -386,7 +416,7 @@ async function listAlbums(requestId) {
   }
 
   try {
-    const albums = await apiUtils.getAllAlbums()
+    const albums = await fetchAllAlbums(apiUtils)
     postResult("listAlbums", requestId, (albums || []).map(mapAlbum))
   } catch (error) {
     postError("listAlbums", requestId, error)
@@ -447,7 +477,7 @@ async function getAllMediaItems(requestId, args) {
 
   try {
     if (albumScope?.mediaKey) {
-      if (!apiUtils?.getAllMediaInAlbum) {
+      if (!apiUtils?.getAllMediaInAlbum && !apiUtils?.api?.getAlbumPage) {
         postError(
           "getAllMediaItems",
           requestId,
@@ -457,7 +487,7 @@ async function getAllMediaItems(requestId, args) {
       }
 
       const albumItems = await withTimeout(
-        apiUtils.getAllMediaInAlbum(albumScope.mediaKey),
+        fetchAllMediaInAlbum(apiUtils, albumScope.mediaKey),
         MEDIA_PAGE_TIMEOUT_MS,
         `Fetching album "${albumScope.title || albumScope.mediaKey}"`
       )

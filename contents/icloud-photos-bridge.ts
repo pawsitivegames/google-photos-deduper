@@ -4,7 +4,7 @@ import { APP_ID } from "../lib/types"
 import type { AppMessage } from "../lib/types"
 
 export const config: PlasmoCSConfig = {
-  matches: ["https://www.icloud.com/*"],
+  matches: ["https://www.icloud.com/*", "https://www.icloud.com.cn/*"],
   all_frames: true,
   run_at: "document_idle"
 }

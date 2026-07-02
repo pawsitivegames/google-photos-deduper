@@ -29,7 +29,7 @@ Uses [Google Photos Toolkit (GPTK)](https://github.com/xob0t/Google-Photos-Toolk
 6. Click **Move to Trash**, read the confirmation, type the exact item count, and confirm
 7. Check the Trash result report, then restore from provider Trash if anything looks wrong
 
-No OAuth setup. No Google Cloud project. No data leaves your browser.
+No OAuth setup. No Google Cloud project. Your photos are analyzed in your browser and never uploaded.
 
 ## Safety Model
 
@@ -59,6 +59,8 @@ For a library around 20k photos, avoid starting with an unscoped full-library co
 The automated suite covers scan setup, duplicate grouping, review behavior, checkpoint/resume, cache diagnostics, report generation, conservative Trash batching, typed confirmation, result reporting, and undo using local and stubbed Google Photos fixtures.
 
 Before using this on a main account, run the live checklist in [VALIDATION.md](VALIDATION.md). A build is not considered production-validated until a tiny live album scan, controlled Trash move, report review, and restore-from-Trash check have passed.
+
+Paid launch readiness is tracked in [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md).
 
 ## Development
 
@@ -143,6 +145,8 @@ GPD_E2E_ALBUM_TITLE="Tiny duplicate test" GPD_E2E_ALLOW_TRASH=1 npm run test:e2e
 Google deprecated the Photos Library API's write access in 2025, and duplicate detection has never been a built-in Google Photos feature. This extension uses [@xob0t](https://github.com/xob0t)'s [Google Photos Toolkit (GPTK)](https://github.com/xob0t/Google-Photos-Toolkit) — an open-source wrapper around Google Photos' undocumented web API — to access your library without OAuth, and runs MediaPipe's MobileNet V3 image embedder locally to find visually identical photos.
 
 ## Support
+
+For paid license, refund, privacy, or deletion requests, email `support@photosweep.app`.
 
 Found a bug or have a feature request? [Open an issue](https://github.com/mtalcott/google-photos-deduper/issues/new/choose).
 

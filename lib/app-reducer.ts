@@ -7,6 +7,7 @@ import type {
   GpdMediaItem,
   GptkProgressMessage,
   HealthCheckResultMessage,
+  PhotoProvider,
   ScanPhase
 } from "./types"
 
@@ -100,7 +101,7 @@ export type AppAction =
       groups: DuplicateGroup[]
       totalItems: number
     }
-  | { type: "GP_TAB_CLOSED" }
+  | { type: "GP_TAB_CLOSED"; provider?: PhotoProvider }
   | { type: "RESET" }
 
 // ============================================================
@@ -150,7 +151,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           action.payload.provider === "icloud"
             ? "icloud.com/photos"
             : action.payload.provider === "amazon"
-              ? "amazon.ca/photos?sf=1"
+              ? "Amazon Photos on your Amazon country site"
               : "photos.google.com"
         return {
           status: "disconnected",
@@ -307,12 +308,25 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         accountEmail: "accountEmail" in state ? state.accountEmail : undefined
       }
 
-    case "GP_TAB_CLOSED":
+    case "GP_TAB_CLOSED": {
+      const provider = action.provider
+      const providerName =
+        provider === "icloud"
+          ? "iCloud Photos"
+          : provider === "amazon"
+            ? "Amazon Photos"
+            : "Google Photos"
+      const providerUrl =
+        provider === "icloud"
+          ? "icloud.com/photos"
+          : provider === "amazon"
+            ? "Amazon Photos on your Amazon country site"
+            : "photos.google.com"
       return {
         status: "disconnected",
-        error:
-          "Google Photos tab was closed. Please reopen photos.google.com and retry."
+        error: `The ${providerName} tab was closed. Please reopen ${providerUrl} and retry.`
       }
+    }
 
     case "RESET":
       return { status: "connecting" }

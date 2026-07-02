@@ -69,8 +69,8 @@ describe("DEFAULT_SETTINGS", () => {
     expect(DEFAULT_SETTINGS.similarityThreshold).toBe(0.95)
   })
 
-  it("uses full scan by default so cross-date reuploads are compared", () => {
-    expect(DEFAULT_SETTINGS.scanMode).toBe("full")
+  it("uses smart scan as the usable default (full is opt-in for paid plans)", () => {
+    expect(DEFAULT_SETTINGS.scanMode).toBe("smart")
   })
 })
 
@@ -346,6 +346,28 @@ describe("GP_TAB_CLOSED", () => {
       const next = appReducer(state, { type: "GP_TAB_CLOSED" })
       expect(next.status).toBe("disconnected")
     }
+  })
+
+  it("names the closed provider in the disconnect message", () => {
+    const googleNext = appReducer(
+      { status: "connecting" },
+      { type: "GP_TAB_CLOSED", provider: "google" }
+    ) as Extract<AppState, { status: "disconnected" }>
+    expect(googleNext.error).toContain("Google Photos")
+    expect(googleNext.error).toContain("photos.google.com")
+
+    const icloudNext = appReducer(
+      { status: "connecting" },
+      { type: "GP_TAB_CLOSED", provider: "icloud" }
+    ) as Extract<AppState, { status: "disconnected" }>
+    expect(icloudNext.error).toContain("iCloud Photos")
+    expect(icloudNext.error).toContain("icloud.com/photos")
+
+    const amazonNext = appReducer(
+      { status: "connecting" },
+      { type: "GP_TAB_CLOSED", provider: "amazon" }
+    ) as Extract<AppState, { status: "disconnected" }>
+    expect(amazonNext.error).toContain("Amazon Photos")
   })
 })
 

@@ -95,10 +95,43 @@ function enableActiveSidePanels(): void {
 
 configureActionSidePanelBehavior()
 
-function providerTabPattern(provider: PhotoProvider = "google"): string {
-  if (provider === "icloud") return "https://www.icloud.com/*"
-  if (provider === "amazon") return "https://www.amazon.ca/*"
-  return "https://photos.google.com/*"
+const AMAZON_PHOTOS_ORIGINS = [
+  "https://www.amazon.com",
+  "https://www.amazon.ca",
+  "https://www.amazon.co.uk",
+  "https://www.amazon.de",
+  "https://www.amazon.fr",
+  "https://www.amazon.it",
+  "https://www.amazon.es",
+  "https://www.amazon.co.jp",
+  "https://www.amazon.com.au",
+  "https://www.amazon.in",
+  "https://www.amazon.com.br",
+  "https://www.amazon.com.mx",
+  "https://www.amazon.nl",
+  "https://www.amazon.sg",
+  "https://www.amazon.ae",
+  "https://www.amazon.sa",
+  "https://www.amazon.se",
+  "https://www.amazon.pl",
+  "https://www.amazon.com.tr",
+  "https://www.amazon.be",
+  "https://www.amazon.eg"
+]
+
+const ICLOUD_PHOTOS_ORIGINS = [
+  "https://www.icloud.com",
+  "https://www.icloud.com.cn"
+]
+
+function providerTabPatterns(provider: PhotoProvider = "google"): string[] {
+  if (provider === "icloud") {
+    return ICLOUD_PHOTOS_ORIGINS.map((origin) => `${origin}/*`)
+  }
+  if (provider === "amazon") {
+    return AMAZON_PHOTOS_ORIGINS.map((origin) => `${origin}/*`)
+  }
+  return ["https://photos.google.com/*"]
 }
 
 function providerName(provider: PhotoProvider = "google"): string {
@@ -107,10 +140,55 @@ function providerName(provider: PhotoProvider = "google"): string {
   return "Google Photos"
 }
 
-function providerOpenUrl(provider: PhotoProvider = "google"): string {
+function providerOpenUrl(
+  provider: PhotoProvider = "google",
+  preferredOrigin?: string
+): string {
   if (provider === "icloud") return "https://www.icloud.com/photos"
-  if (provider === "amazon") return "https://www.amazon.ca/photos?sf=1"
+  if (provider === "amazon") {
+    const origin = preferredOrigin?.startsWith("https://www.amazon.")
+      ? preferredOrigin
+      : "https://www.amazon.com"
+    return `${origin}/photos?sf=1`
+  }
   return "https://photos.google.com/"
+}
+
+function providerOpenUrlForTab(
+  provider: PhotoProvider,
+  tab: Pick<chrome.tabs.Tab, "url"> | undefined
+): string {
+  if (!tab?.url || provider !== "amazon") return providerOpenUrl(provider)
+  try {
+    const url = new URL(tab.url)
+    if (AMAZON_PHOTOS_ORIGINS.includes(url.origin)) {
+      return providerOpenUrl(provider, url.origin)
+    }
+  } catch {
+    // Fall back to the default provider URL.
+  }
+  return providerOpenUrl(provider)
+}
+
+function isProviderPhotosPage(
+  tab: Pick<chrome.tabs.Tab, "url"> | undefined,
+  provider: PhotoProvider
+): boolean {
+  if (!tab?.url) return false
+  try {
+    const url = new URL(tab.url)
+    if (provider === "icloud") {
+      return ICLOUD_PHOTOS_ORIGINS.includes(url.origin) &&
+        url.pathname.includes("/photos")
+    }
+    if (provider === "amazon") {
+      return AMAZON_PHOTOS_ORIGINS.includes(url.origin) &&
+        url.pathname.startsWith("/photos")
+    }
+    return url.hostname === "photos.google.com"
+  } catch {
+    return false
+  }
 }
 
 function tabMatchesProvider(
@@ -120,8 +198,8 @@ function tabMatchesProvider(
   if (!tab?.url) return false
   try {
     const url = new URL(tab.url)
-    if (provider === "icloud") return url.hostname === "www.icloud.com"
-    if (provider === "amazon") return url.hostname === "www.amazon.ca"
+    if (provider === "icloud") return ICLOUD_PHOTOS_ORIGINS.includes(url.origin)
+    if (provider === "amazon") return AMAZON_PHOTOS_ORIGINS.includes(url.origin)
     return url.hostname === "photos.google.com"
   } catch {
     return false
@@ -183,7 +261,10 @@ async function findProviderTab(
     }
   }
 
-  const tabs = await chrome.tabs.query({ url: providerTabPattern(provider) })
+  const tabResults = await Promise.all(
+    providerTabPatterns(provider).map((url) => chrome.tabs.query({ url }))
+  )
+  const tabs = tabResults.flat()
   if (tabs.length === 0) return null
 
   // `lastAccessed` is available in Chrome 121+ but missing from this version
@@ -279,11 +360,13 @@ async function ensureGoogleMainWorldScripts(tabId: number): Promise<boolean> {
 }
 
 function contentScriptFilesForProvider(provider: PhotoProvider): string[] {
-  const pattern = providerTabPattern(provider)
+  const patterns = providerTabPatterns(provider)
   const manifest = chrome.runtime.getManifest()
   return (
     manifest.content_scripts
-      ?.filter((script) => script.matches?.includes(pattern))
+      ?.filter((script) =>
+        script.matches?.some((match) => patterns.includes(match))
+      )
       .flatMap((script) => script.js ?? []) ?? []
   )
 }
@@ -485,7 +568,6 @@ async function openProviderInCurrentTab(
   preferredTabId?: number | null,
   allowCreate = true
 ): Promise<{ tab: chrome.tabs.Tab; alreadyOpen: boolean } | null> {
-  const url = providerOpenUrl(provider)
   const seenTabIds = new Set<number>()
 
   async function tryOpenCandidate(
@@ -496,7 +578,7 @@ async function openProviderInCurrentTab(
     }
     seenTabIds.add(targetTab.id)
     if (!canNavigateTabToProvider(targetTab)) return null
-    const alreadyOpen = tabMatchesProvider(targetTab, provider)
+    const alreadyOpen = isProviderPhotosPage(targetTab, provider)
     if (alreadyOpen) {
       const focusedTab =
         (await chrome.tabs
@@ -506,7 +588,7 @@ async function openProviderInCurrentTab(
     }
     try {
       const openedTab = await chrome.tabs.update(targetTab.id, {
-        url,
+        url: providerOpenUrlForTab(provider, targetTab),
         active: true
       })
       return { tab: openedTab, alreadyOpen }
@@ -528,6 +610,16 @@ async function openProviderInCurrentTab(
     if (preferredResult) return preferredResult
   }
 
+  const existingProviderTabs = (
+    await Promise.all(
+      providerTabPatterns(provider).map((url) => chrome.tabs.query({ url }))
+    )
+  ).flat()
+  for (const providerTab of existingProviderTabs) {
+    const providerResult = await tryOpenCandidate(providerTab)
+    if (providerResult) return providerResult
+  }
+
   const [activeTab] = await chrome.tabs.query({
     active: true,
     currentWindow: true
@@ -541,7 +633,10 @@ async function openProviderInCurrentTab(
   }
 
   if (!allowCreate) return null
-  const createdTab = await chrome.tabs.create({ url, active: true })
+  const createdTab = await chrome.tabs.create({
+    url: providerOpenUrl(provider),
+    active: true
+  })
   return { tab: createdTab, alreadyOpen: false }
 }
 
@@ -1172,7 +1267,9 @@ async function handleGptkCommand(
 
   if (
     provider === "icloud" &&
-    (message.command === "getAllMediaItems" || message.command === "trashItems")
+    (message.command === "getAllMediaItems" ||
+      message.command === "trashItems" ||
+      message.command === "restoreItems")
   ) {
     await chrome.tabs.update(providerTabId, { active: true }).catch(() => {})
     await sleep(1500)

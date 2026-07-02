@@ -144,16 +144,59 @@ function retryLimitFor(error) {
     : AMAZON_API_RETRY_COUNT
 }
 
+const AMAZON_PHOTOS_HOSTS = new Set([
+  "www.amazon.com",
+  "www.amazon.ca",
+  "www.amazon.co.uk",
+  "www.amazon.de",
+  "www.amazon.fr",
+  "www.amazon.it",
+  "www.amazon.es",
+  "www.amazon.co.jp",
+  "www.amazon.com.au",
+  "www.amazon.in",
+  "www.amazon.com.br",
+  "www.amazon.com.mx",
+  "www.amazon.nl",
+  "www.amazon.sg",
+  "www.amazon.ae",
+  "www.amazon.sa",
+  "www.amazon.se",
+  "www.amazon.pl",
+  "www.amazon.com.tr",
+  "www.amazon.be",
+  "www.amazon.eg"
+])
+
+function isAmazonPhotosHost(hostname = location.hostname) {
+  return AMAZON_PHOTOS_HOSTS.has(hostname)
+}
+
+function amazonOrigin() {
+  return `${location.protocol}//${location.host}`
+}
+
+function amazonPhotosUrl(path) {
+  return new URL(path, amazonOrigin()).toString()
+}
+
+function amazonThumbnailOrigin() {
+  return `${location.protocol}//${location.host.replace(
+    /^www\.amazon\./,
+    "thumbnails-photos.amazon."
+  )}`
+}
+
 function assertSupportedRoute() {
   const route = location.href.toLowerCase()
   if (
-    location.hostname !== "www.amazon.ca" ||
+    !isAmazonPhotosHost() ||
     !route.includes("/photos") ||
     route.includes("/trash") ||
     route.includes("deleted")
   ) {
     throw new Error(
-      "Open Amazon Photos at amazon.ca/photos?sf=1, wait for the library to load, then scan again."
+      "Open Amazon Photos on your Amazon country site, wait for the library to load, then scan again."
     )
   }
 }
@@ -173,7 +216,7 @@ function amazonApiHeaders() {
 }
 
 function amazonSearchUrl({ offset, limit, filters }) {
-  const url = new URL("https://www.amazon.ca/drive/v1/search")
+  const url = new URL("/drive/v1/search", amazonOrigin())
   url.searchParams.set("asset", "ALL")
   url.searchParams.set("tempLink", "false")
   url.searchParams.set("resourceVersion", "V2")
@@ -344,7 +387,8 @@ function nodeThumbnailUrl(node) {
   const ownerId = node.ownerId || node.createdBy || node.modifiedBy
   if (node.id && ownerId) {
     const url = new URL(
-      `https://thumbnails-photos.amazon.ca/v1/thumbnail/${encodeURIComponent(node.id)}`
+      `/v1/thumbnail/${encodeURIComponent(node.id)}`,
+      amazonThumbnailOrigin()
     )
     url.searchParams.set("ownerId", ownerId)
     url.searchParams.set("viewBox", "600")
@@ -421,7 +465,9 @@ function mapAmazonNode(node, index) {
     exactContentHash: content.md5 ? `amazon-md5-${content.md5}` : undefined,
     thumb,
     provider: "amazon",
-    productUrl: `https://www.amazon.ca/photos/all/gallery/${encodeURIComponent(id)}?sf=1`,
+    productUrl: amazonPhotosUrl(
+      `/photos/all/gallery/${encodeURIComponent(id)}?sf=1`
+    ),
     timestamp,
     creationTimestamp,
     resWidth: width,
@@ -512,7 +558,7 @@ async function trashAmazonChunk(requestId, chunk, chunkIndex, chunkCount) {
     )
     try {
       await patchJsonWithTimeout(
-        "https://www.amazon.ca/drive/v1/trash",
+        amazonPhotosUrl("/drive/v1/trash"),
         {
           recurse: "true",
           op: "add",
@@ -531,10 +577,42 @@ async function trashAmazonChunk(requestId, chunk, chunkIndex, chunkCount) {
       await sleep(1000 * (attempt + 1))
     }
   }
-  throw lastError
-}
+    throw lastError
+  }
 
-async function trashItems(requestId, args) {
+  async function restoreAmazonChunk(requestId, chunk, chunkIndex, chunkCount) {
+    let lastError
+    for (let attempt = 0; attempt <= AMAZON_API_RETRY_COUNT; attempt++) {
+      postProgress(
+        requestId,
+        0,
+        attempt === 0
+          ? `Restoring Amazon batch ${chunkIndex + 1} of ${chunkCount}...`
+          : `Retrying Amazon restore batch ${chunkIndex + 1} of ${chunkCount} (${attempt}/${AMAZON_API_RETRY_COUNT})...`,
+        "restoreItems"
+      )
+      try {
+        // Recover = same /drive/v1/trash endpoint as trash, with op:"remove".
+        await patchJsonWithTimeout(
+          amazonPhotosUrl("/drive/v1/trash"),
+          {
+            op: "remove",
+            conflictResolution: "RENAME",
+            value: chunk
+          },
+          `Restoring Amazon batch ${chunkIndex + 1}`
+        )
+        return chunk
+      } catch (error) {
+        lastError = error
+        if (attempt >= AMAZON_API_RETRY_COUNT) break
+        await sleep(1000 * (attempt + 1))
+      }
+    }
+    throw lastError
+  }
+
+  async function trashItems(requestId, args) {
   const dedupKeys = validateStringArray(
     "trashItems",
     requestId,
@@ -610,9 +688,55 @@ async function trashItems(requestId, args) {
   }
 }
 
+async function restoreItems(requestId, args) {
+  const dedupKeys = validateStringArray(
+    "restoreItems",
+    requestId,
+    "dedupKeys",
+    args?.dedupKeys
+  )
+  if (!dedupKeys) return
+
+  const restoredDedupKeys = []
+  try {
+    assertSupportedRoute()
+    const batchSize = normalizeTrashBatchSize(args?.batchSize)
+    const chunks = chunkArray(dedupKeys, batchSize)
+    for (let index = 0; index < chunks.length; index++) {
+      const restoredChunk = await restoreAmazonChunk(
+        requestId,
+        chunks[index],
+        index,
+        chunks.length
+      )
+      restoredDedupKeys.push(...restoredChunk)
+      postProgress(
+        requestId,
+        restoredDedupKeys.length,
+        `Restored ${restoredDedupKeys.length} of ${dedupKeys.length} Amazon Photos items from trash`,
+        "restoreItems",
+        {
+          restoredDedupKeys: restoredDedupKeys.slice()
+        }
+      )
+    }
+
+    postResult("restoreItems", requestId, {
+      restoredCount: restoredDedupKeys.length,
+      restoredDedupKeys
+    })
+  } catch (error) {
+    postError("restoreItems", requestId, error, {
+      partial: restoredDedupKeys.length > 0,
+      restoredCount: restoredDedupKeys.length,
+      restoredDedupKeys: restoredDedupKeys.slice()
+    })
+  }
+}
+
 function healthCheck(requestId) {
   const onAmazonPhotos =
-    location.hostname === "www.amazon.ca" &&
+    isAmazonPhotosHost() &&
     location.pathname.toLowerCase().includes("/photos")
   const pageText = document.body?.innerText || ""
   const hasSignInPrompt =
@@ -638,6 +762,9 @@ window.addEventListener("message", async (event) => {
       break
     case "trashItems":
       await trashItems(requestId, args)
+      break
+    case "restoreItems":
+      await restoreItems(requestId, args)
       break
     case "healthCheck":
       healthCheck(requestId)

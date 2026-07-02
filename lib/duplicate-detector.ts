@@ -808,9 +808,19 @@ export async function smartDetectDuplicates(
   // Step 1: Bucket by timestamp — no I/O, instant
   const timestampBuckets = groupByTimestamp(candidates, windowMs)
   const sequenceBuckets = groupByProviderSequence(candidates)
-  const embeddingCandidateBuckets = [...timestampBuckets, ...sequenceBuckets]
+  // Small scoped scans should behave consistently across providers. Some
+  // providers, notably iCloud, can return duplicate uploads with non-adjacent
+  // provider order and taken timestamps outside the default Smart window even
+  // when the user intentionally scoped the scan down to a tiny batch. In that
+  // case, comparing the whole small candidate set keeps Smart fast while making
+  // it catch the same obvious duplicate pair that Full catches.
+  const smallScopeBuckets = candidates.length > 1 && candidates.length <= 100
+    ? [candidates]
+    : []
+  const detectionBuckets = [...timestampBuckets, ...smallScopeBuckets]
+  const embeddingCandidateBuckets = [...detectionBuckets, ...sequenceBuckets]
   console.log(
-    `[GPD] smartDetectDuplicates: ${mediaItems.length} items → ${candidates.length} candidates → ${timestampBuckets.length} timestamp buckets, ${sequenceBuckets.length} sequence pairs`
+    `[GPD] smartDetectDuplicates: ${mediaItems.length} items → ${candidates.length} candidates → ${timestampBuckets.length} timestamp buckets, ${sequenceBuckets.length} sequence pairs, ${smallScopeBuckets.length} small-scope buckets`
   )
   const subset = smartScanEmbeddingCandidates(
     candidates,
@@ -915,7 +925,7 @@ export async function smartDetectDuplicates(
   for (let i = 0; i < validIndices.length; i++)
     mediaKeyToEmbIdx.set(subset[validIndices[i]].mediaKey, i)
 
-  const workerBuckets = timestampBuckets
+  const workerBuckets = detectionBuckets
     .map((bucket) =>
       bucket
         .map((item) => mediaKeyToEmbIdx.get(item.mediaKey))
@@ -1449,10 +1459,14 @@ async function runCommunityDetectionInWorker(
 }
 
 // ============================================================
-// Community detection
-// Sorts by timestamp, then walks through comparing each photo
-// to the next. Consecutive similar photos are grouped together.
-// O(n) instead of O(n²).
+// Community detection (reference / unit-test implementation)
+// Sorts by timestamp, then walks through comparing each photo to the next.
+// Consecutive similar photos are grouped together. Linear in item count.
+//
+// NOTE: this is NOT the production detection path. Production smart/full scans
+// run in the embedder worker via runSmartDetectionInWorker /
+// runCommunityDetectionInWorker (see workers/embedder.worker.ts). This function
+// is exported only so the grouping logic can be unit-tested directly.
 // ============================================================
 
 /**

@@ -1,6 +1,7 @@
 # Validation Checklist
 
-Use this checklist before trusting Google Photos Deduper on a main library.
+Use this checklist before trusting PhotoSweep on a main library or shipping paid
+multi-provider support.
 
 ## Automated Gates
 
@@ -40,7 +41,7 @@ GPD_E2E_DATE_FROM="2026-01-01" GPD_E2E_DATE_TO="2026-01-31" npm run test:e2e
 1. Create or choose a tiny album with two duplicate test photos and at least one non-duplicate.
 2. Open `photos.google.com` in Chrome and confirm the intended account is signed in.
 3. Load the unpacked extension from `build/chrome-mv3-prod` or `build/chrome-mv3-dev`.
-4. Open Deduper and confirm the app shows the expected signed-in account.
+4. Open PhotoSweep and confirm the app shows the expected signed-in account.
 5. Choose the tiny album scope.
 6. Run a Smart scan.
 7. Confirm the scan result only contains the expected duplicate group.
@@ -59,6 +60,33 @@ Required result:
 - The pre-Trash report is saved before the Trash operation.
 - The Trash result report matches the actual Google Photos outcome.
 - Restore from Google Photos Trash works for the moved item.
+- Google Photos, iCloud Photos, and Amazon Photos use the same free and paid
+  feature limits. Provider-specific live Trash/Restore evidence is recorded
+  below before making paid multi-provider claims.
+
+## Paid Launch Validation
+
+Run this after Stripe test-mode checkout and license refresh are working.
+
+1. Build the extension with production-style license API variables and the test
+   public key.
+2. Load the extension into a logged-in Chrome profile.
+3. Start as a free user and verify:
+   - Full scan is locked.
+   - Free visible groups are capped.
+   - Trash moves are capped cumulatively per cleanup session.
+   - Export still downloads a limited report.
+4. Buy each test-mode Stripe plan:
+   - Mini Cleanup
+   - Cleanup Pass
+   - Lifetime Early Access
+5. Refresh the license in PhotoSweep after each checkout.
+6. Verify each plan's scan, visible group, Trash, report, full scan, and resume
+   limits match `lib/entitlement.ts`.
+7. Refund the test payment from Stripe and verify PhotoSweep downgrades to free
+   after entitlement refresh.
+8. Confirm analytics/license payloads contain only provider, scan mode, plan id,
+   count buckets, event name, and error category.
 
 ## Live Account Smoke Test - 2026-06-28
 
@@ -119,6 +147,157 @@ Evidence:
 Required cleanup:
 
 - The two uploaded synthetic test images remain in Google Photos until explicitly moved to Trash or deleted by the account owner.
+
+## Live Tiny-Album Trash/Undo Gate - 2026-06-30
+
+Environment:
+
+- Chrome normal profile, signed in to Google Photos as `mustafa.dungar@gmail.com`.
+- Unpacked dev extension loaded from `build/chrome-mv3-dev`.
+- Runtime extension id: `efdneecimbdbeafpllggkmahiehhimhn`.
+- Automated `.chrome-live-validation` profile was not signed in; it redirected to
+  `https://www.google.com/photos/about/`, so this run used the already signed-in
+  Chrome profile and manual app/DOM validation.
+
+Setup:
+
+- Created Google Photos album `Tiny duplicate test`.
+- Album contained three synthetic PNG images:
+  - two matching duplicate candidates
+  - one distinct control image
+
+Evidence:
+
+- Before the fix in `scripts/google-photos-commands.js`, PhotoSweep showed
+  `0 albums available` even though `window.gptkApi.getAlbums(null, 100, false)`
+  returned live album rows including `Tiny duplicate test`.
+- After rebuilding and reloading the extension, PhotoSweep showed
+  `6 albums available`, including `Tiny duplicate test (3)`.
+- Album-scoped Smart scan for `Tiny duplicate test` completed with:
+  - `3 photos and videos checked`
+  - `1 Duplicate Set Ready`
+  - `0 identical`
+  - `1 similar`
+  - `95% match`
+  - `Move 1 to Trash`
+- Trash confirmation required typing the exact count `1`; the final
+  **Move to Trash** button stayed disabled until the value was entered.
+- Trash operation completed with `1 item moved to trash`.
+- Clicking **Undo** restored the test item; the app returned to the previous
+  duplicate-review state with `1 Duplicate Set Ready` and `3 photos and videos
+  checked`.
+
+Current caveat:
+
+- The live Playwright command still requires a signed-in CDP Chrome or signed-in
+  `.chrome-live-validation` profile before `GPD_E2E_ALBUM_TITLE="Tiny duplicate
+  test" npm run test:e2e` can run automatically on this machine.
+
+## Live Amazon Photos Read-Only Smoke - 2026-06-30
+
+Environment:
+
+- Chrome normal profile, signed in to Amazon Photos Canada as `Mustafa
+  Dungarpurwala`.
+- Unpacked dev extension loaded from `build/chrome-mv3-dev`.
+- Page URL: `https://www.amazon.ca/photos?sf=1`.
+- No Trash/delete operation was performed.
+
+Evidence:
+
+- Amazon Photos page loaded with the signed-in library visible.
+- PhotoSweep Amazon command `healthCheck` returned `success=true` and
+  `hasGptk=true`.
+- Read-only Amazon command `getAllMediaItems` with `{ "limit": 20 }` returned:
+  - 20 live media items
+  - Amazon media keys using the `amazon-...` format
+  - thumbnail URLs on `thumbnails-photos.amazon.ca`
+  - MD5-based exact-content hashes
+  - product URLs on `https://www.amazon.ca/photos/all/gallery/...`
+  - filenames, dimensions, timestamps, and file sizes
+- Progress reported:
+  - `Fetching first Amazon Photos API page...`
+  - `Fetched 20 Amazon Photos items`
+- `npm test -- --run tests/commands/amazon-photos-commands.test.ts` passed with
+  8 tests, including Amazon trash and restore request coverage.
+
+Live synthetic Trash/Restore evidence:
+
+- Uploaded three synthetic PNGs to Amazon Photos:
+  - `gpd-live-duplicate-copy-2.png`
+  - `gpd-live-duplicate-copy-1.png`
+  - `gpd-live-control.png`
+- Live Amazon command `getAllMediaItems` with `{ "limit": 10 }` returned all
+  three synthetic items as the newest library rows.
+- Moved only `gpd-live-duplicate-copy-2.png` to Trash via live Amazon command:
+  - `dedupKey`: `PM18UFQPTiGPbcjRm18MYg`
+  - `mediaKey`: `amazon-PM18UFQPTiGPbcjRm18MYg`
+  - result: `trashedCount=1`
+- A follow-up live library fetch returned only the remaining two synthetic
+  items, proving the trashed synthetic duplicate dropped out of the normal
+  library view.
+- Restored the same Amazon node id via live Amazon command:
+  - result: `restoredCount=1`
+- Final live library fetch returned all three synthetic items again.
+
+## Live iCloud Photos CloudKit Trash/Restore - 2026-06-30
+
+Environment:
+
+- Chrome normal profile, signed in to iCloud Photos.
+- Unpacked dev extension loaded from `build/chrome-mv3-dev`.
+- Page URL: `https://www.icloud.com/photos/`.
+
+Setup:
+
+- Uploaded three synthetic JPGs to iCloud Photos:
+  - `gpd-live-control.jpg`
+  - `gpd-live-duplicate-copy-2.jpg`
+  - `gpd-live-duplicate-copy-1.jpg`
+
+Evidence:
+
+- iCloud Photos page showed `3 Photos`.
+- PhotoSweep iCloud command `healthCheck` returned `success=true` and
+  `hasGptk=true`.
+- Live CloudKit `records/query` returned 6 records mapped to the three
+  synthetic JPGs, each with a fresh `CPLAsset` record name, change tag, zone,
+  owner record, dimensions, size, timestamp, and fingerprint.
+- Moved only `gpd-live-duplicate-copy-2.jpg` to Recently Deleted via live
+  CloudKit `records/modify`:
+  - asset record: `8c9ecddb-6431-48b3-9ab0-fae37849a61e`
+  - pre-trash change tag: `n`
+  - result: HTTP 200, `isDeleted=1`, post-trash change tag `r`
+- A follow-up live normal-library query returned only:
+  - `gpd-live-control.jpg`
+  - `gpd-live-duplicate-copy-1.jpg`
+- Restored the same synthetic asset via live CloudKit `records/modify`:
+  - post-trash change tag used: `r`
+  - result: HTTP 200, post-restore change tag `y`
+- Final live normal-library query returned all three synthetic JPGs again.
+
+App-driven validation:
+
+- Switched the app provider to iCloud Photos and scanned the uploaded JPGs.
+- Result summary: `1 sets`, `3 checked`, `0 identical`, `1 similar`.
+- Review kept `gpd-live-duplicate-copy-1.jpg` and selected
+  `gpd-live-duplicate-copy-2.jpg` for trash.
+- The confirmation dialog required typing `1` before `Move to Trash` enabled.
+- After `Move 1 to Trash`, a live CloudKit normal-library query returned only:
+  - `gpd-live-control.jpg`
+  - `gpd-live-duplicate-copy-1.jpg`
+- The first app-driven Undo attempt exposed a restore metadata bug when
+  CloudKit returned a fresh change tag without `zoneID`; the app showed:
+  `Restore failed: iCloud restore metadata ... is missing`.
+- Fixed by preserving the original iCloud zone metadata while merging the fresh
+  post-trash change tag.
+- After rebuilding `build/chrome-mv3-dev`, repeated the same app-driven scan ->
+  Trash -> Undo path.
+- Post-Undo app state returned to the same duplicate-review result, and a live
+  CloudKit normal-library query returned all three synthetic JPGs again:
+  - `gpd-live-control.jpg`
+  - `gpd-live-duplicate-copy-2.jpg`
+  - `gpd-live-duplicate-copy-1.jpg`
 
 ## Live Month/Year Gate
 

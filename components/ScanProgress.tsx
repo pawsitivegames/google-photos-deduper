@@ -20,6 +20,7 @@ interface ScanProgressProps {
   message: string
   onPause?: () => void
   idleWarningMs?: number
+  compact?: boolean
 }
 
 const PHASE_LABELS: Record<ScanPhase, string> = {
@@ -58,7 +59,8 @@ export function ScanProgress({
   totalEstimate,
   message,
   onPause,
-  idleWarningMs = 120_000
+  idleWarningMs = 120_000,
+  compact = false
 }: ScanProgressProps) {
   const [idleMs, setIdleMs] = useState(0)
   const lastProgressAtRef = useRef(Date.now())
@@ -118,22 +120,35 @@ export function ScanProgress({
   const stepNum = PHASE_STEP[phase]
 
   return (
-    <Box sx={{ maxWidth: 860, mx: "auto", py: { xs: 2, md: 6 } }}>
+    <Box
+      sx={{
+        maxWidth: compact ? "none" : 860,
+        mx: compact ? 0 : "auto",
+        py: compact ? 0 : { xs: 2, md: 6 }
+      }}>
       <Paper
         elevation={0}
         sx={{
-          p: { xs: 2.5, md: 4 },
+          p: compact ? 1.25 : { xs: 2.5, md: 4 },
           border: "1px solid",
           borderColor: "rgba(214,226,221,0.9)",
-          borderRadius: 3,
-          bgcolor: photoSweepColors.surfaceTint,
+          borderRadius: compact ? 2 : 3,
+          bgcolor: compact
+            ? photoSweepColors.surface
+            : photoSweepColors.surfaceTint,
           backdropFilter: "saturate(180%) blur(22px)",
-          boxShadow: `0 24px 70px ${photoSweepColors.shadow}`
+          boxShadow: compact ? "none" : `0 24px 70px ${photoSweepColors.shadow}`
         }}>
-        <Typography variant="h5" gutterBottom>
+        <Typography
+          variant={compact ? "subtitle2" : "h5"}
+          fontWeight={800}
+          gutterBottom>
           Finding Duplicates
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        <Typography
+          variant={compact ? "caption" : "body2"}
+          color="text.secondary"
+          sx={{ display: "block", mb: compact ? 1.25 : 3, lineHeight: 1.35 }}>
           Checking your library and preparing clear review sets.
         </Typography>
 
@@ -146,9 +161,9 @@ export function ScanProgress({
         )}
 
         <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={1}
-          sx={{ mb: 3 }}>
+          direction={compact ? "column" : { xs: "column", md: "row" }}
+          spacing={compact ? 0.75 : 1}
+          sx={{ mb: compact ? 1.25 : 3 }}>
           {(Object.keys(PHASE_STEP) as ScanPhase[])
             .filter((step) => step !== "complete")
             .map((step) => {
@@ -160,13 +175,17 @@ export function ScanProgress({
                   key={step}
                   sx={{
                     flex: 1,
-                    p: 1.25,
+                    p: compact ? 0.85 : 1.25,
                     border: "1px solid",
                     borderColor: active ? "primary.main" : "divider",
-                    borderRadius: 2,
-                    bgcolor: active ? "primary.light" : photoSweepColors.surface,
+                    borderRadius: compact ? 1.5 : 2,
+                    bgcolor: active
+                      ? "primary.light"
+                      : photoSweepColors.surface,
                     boxShadow: active
-                      ? `0 10px 24px ${photoSweepColors.primaryShadow}`
+                      ? compact
+                        ? `0 4px 12px ${photoSweepColors.primaryShadow}`
+                        : `0 10px 24px ${photoSweepColors.primaryShadow}`
                       : "none",
                     display: "flex",
                     alignItems: "center",
@@ -195,7 +214,7 @@ export function ScanProgress({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            mb: 2
+            mb: compact ? 1 : 2
           }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <CircularProgress size={14} thickness={5} />
@@ -213,10 +232,15 @@ export function ScanProgress({
         <LinearProgress
           variant={isDeterminate ? "determinate" : "indeterminate"}
           value={progress}
-          sx={{ mb: 1 }}
+          sx={{ mb: compact ? 0.75 : 1 }}
         />
 
-        <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            mb: compact ? 1 : 2
+          }}>
           <Typography variant="caption" color="text.secondary">
             {isDeterminate
               ? `${itemsProcessed.toLocaleString()} of ${totalEstimate.toLocaleString()} checked`
@@ -230,12 +254,13 @@ export function ScanProgress({
         </Box>
 
         {onPause && (
-          <Box sx={{ mt: 3 }}>
+          <Box sx={{ mt: compact ? 1.25 : 3 }}>
             <Button
               variant="outlined"
               color="inherit"
               size="small"
-              onClick={onPause}>
+              onClick={onPause}
+              sx={compact ? { width: "100%" } : undefined}>
               Pause Scan
             </Button>
           </Box>

@@ -210,6 +210,11 @@ describe("iCloud trashItems dry-run", () => {
       "master-A",
       "master-B"
     ])
+    expect(fetchSpy.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        signal: expect.any(AbortSignal)
+      })
+    )
     expect(
       fetchSpy.mock.calls.some(([, init]) =>
         String(init?.body).includes('"value":100')
@@ -221,23 +226,153 @@ describe("iCloud trashItems dry-run", () => {
     restore()
   })
 
-  it("rejects non-dry-run trash commands", async () => {
+  it("moves iCloud items to trash with CloudKit records/modify", async () => {
     const { messages, restore } = collectMessages()
+    const performanceSpy = vi
+      .spyOn(window.performance, "getEntriesByType")
+      .mockReturnValue([
+        {
+          name: "https://p167-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?remapEnums=true"
+        } as PerformanceEntry
+      ])
+    const fetchSpy = vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        records: [
+          {
+            recordName: "asset-a",
+            recordChangeTag: "tag-after-trash",
+            zoneID: {
+              zoneName: "PrimarySync",
+              ownerRecordName: "_defaultOwner"
+            }
+          }
+        ]
+      })
+    } as Response)
 
     sendCommand("trashItems", "icloud-trash-real", {
       dedupKeys: ["icloud-a"],
-      mediaKeysToTrash: ["icloud-a"]
+      mediaKeysToTrash: ["icloud-media-a"],
+      icloudAssetRefs: [
+        {
+          recordName: "asset-a",
+          changeTag: "tag-before-trash",
+          zoneName: "PrimarySync",
+          ownerRecordName: "_defaultOwner"
+        }
+      ]
     })
+    await flush()
+    await flush()
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/records/modify?"),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: expect.stringContaining('"isDeleted":{"value":1}')
+      })
+    )
+    const requestBody = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))
+    expect(requestBody).toMatchObject({
+      atomic: true,
+      zoneID: {
+        zoneName: "PrimarySync",
+        ownerRecordName: "_defaultOwner"
+      },
+      operations: [
+        {
+          operationType: "update",
+          record: {
+            recordName: "asset-a",
+            recordChangeTag: "tag-before-trash",
+            recordType: "CPLAsset",
+            fields: { isDeleted: { value: 1 } }
+          }
+        }
+      ]
+    })
+
+    const result = messages.find(
+      (msg) => msg.action === "gptkResult" && msg.command === "trashItems"
+    )
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        trashedCount: 1,
+        trashedKeys: ["icloud-media-a"],
+        trashedDedupKeys: ["icloud-a"],
+        icloudAssetRefs: [
+          {
+            recordName: "asset-a",
+            changeTag: "tag-after-trash",
+            zoneName: "PrimarySync",
+            ownerRecordName: "_defaultOwner"
+          }
+        ]
+      }
+    })
+    fetchSpy.mockRestore()
+    performanceSpy.mockRestore()
+    restore()
+  })
+
+  it("preserves original iCloud zone metadata when trash response omits zoneID", async () => {
+    const { messages, restore } = collectMessages()
+    const performanceSpy = vi
+      .spyOn(window.performance, "getEntriesByType")
+      .mockReturnValue([
+        {
+          name: "https://p167-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?remapEnums=true"
+        } as PerformanceEntry
+      ])
+    const fetchSpy = vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        records: [
+          {
+            recordName: "asset-a",
+            recordChangeTag: "tag-after-trash"
+          }
+        ]
+      })
+    } as Response)
+
+    sendCommand("trashItems", "icloud-trash-zone-fallback", {
+      dedupKeys: ["icloud-a"],
+      mediaKeysToTrash: ["icloud-media-a"],
+      icloudAssetRefs: [
+        {
+          recordName: "asset-a",
+          changeTag: "tag-before-trash",
+          zoneName: "PrimarySync",
+          ownerRecordName: "_defaultOwner"
+        }
+      ]
+    })
+    await flush()
     await flush()
 
     const result = messages.find(
       (msg) => msg.action === "gptkResult" && msg.command === "trashItems"
     )
     expect(result).toMatchObject({
-      success: false,
-      error:
-        "iCloud trash is only available in dry-run test mode. No iCloud items were deleted."
+      success: true,
+      data: {
+        trashedCount: 1,
+        icloudAssetRefs: [
+          {
+            recordName: "asset-a",
+            changeTag: "tag-after-trash",
+            zoneName: "PrimarySync",
+            ownerRecordName: "_defaultOwner"
+          }
+        ]
+      }
     })
+    fetchSpy.mockRestore()
+    performanceSpy.mockRestore()
     restore()
   })
 
@@ -264,6 +399,71 @@ describe("iCloud trashItems dry-run", () => {
         trashedDedupKeys: []
       }
     })
+    restore()
+  })
+})
+
+describe("restoreItems", () => {
+  it("restores iCloud trash items with fresh CloudKit asset refs", async () => {
+    const { messages, restore } = collectMessages()
+    const performanceSpy = vi
+      .spyOn(window.performance, "getEntriesByType")
+      .mockReturnValue([
+        {
+          name: "https://p167-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?remapEnums=true"
+        } as PerformanceEntry
+      ])
+    const fetchSpy = vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        records: [
+          {
+            recordName: "asset-a",
+            recordChangeTag: "tag-after-restore",
+            zoneID: {
+              zoneName: "PrimarySync",
+              ownerRecordName: "_defaultOwner"
+            }
+          }
+        ]
+      })
+    } as Response)
+
+    sendCommand("restoreItems", "icloud-restore", {
+      dedupKeys: ["icloud-a"],
+      icloudAssetRefs: [
+        {
+          recordName: "asset-a",
+          changeTag: "tag-after-trash",
+          zoneName: "PrimarySync",
+          ownerRecordName: "_defaultOwner"
+        }
+      ]
+    })
+    await flush()
+    await flush()
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/records/modify?"),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: expect.stringContaining('"isDeleted":{"value":0}')
+      })
+    )
+
+    const result = messages.find(
+      (msg) => msg.action === "gptkResult" && msg.command === "restoreItems"
+    )
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        restoredCount: 1,
+        restoredDedupKeys: ["icloud-a"]
+      }
+    })
+    fetchSpy.mockRestore()
+    performanceSpy.mockRestore()
     restore()
   })
 })

@@ -217,7 +217,15 @@ function fallbackThumbnailBackground(seed: string): string {
   ]
 }
 
-function ThumbnailImage({ src, alt }: { src: string; alt: string }) {
+function ThumbnailImage({
+  src,
+  alt,
+  height = 132
+}: {
+  src: string
+  alt: string
+  height?: number
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
 
@@ -245,7 +253,9 @@ function ThumbnailImage({ src, alt }: { src: string; alt: string }) {
       <Box
         ref={ref}
         sx={{
-          height: 132,
+          height,
+          minHeight: height,
+          maxHeight: height,
           background: fallbackThumbnailBackground(alt),
           position: "relative",
           overflow: "hidden",
@@ -276,10 +286,10 @@ function ThumbnailImage({ src, alt }: { src: string; alt: string }) {
           component="img"
           image={blobUrl}
           alt={alt}
-          sx={{ height: 132, objectFit: "cover" }}
+          sx={{ height, objectFit: "cover" }}
         />
       ) : (
-        <Skeleton variant="rectangular" height={132} animation="wave" />
+        <Skeleton variant="rectangular" height={height} animation="wave" />
       )}
     </div>
   )
@@ -364,6 +374,12 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
             checked={isSelected}
             onChange={() => onToggleGroup(group.id)}
             onClick={(e) => e.stopPropagation()}
+            inputProps={{
+              "aria-label": `Select duplicate set of ${group.mediaKeys.length} ${groupItemKind(
+                group,
+                mediaItems
+              )}`
+            }}
             sx={sxCheckbox}
           />
         )}
@@ -479,6 +495,15 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
                   }
                 ]}>
                 <CardActionArea
+                  sx={
+                    compact
+                      ? {
+                          display: "grid",
+                          gridTemplateColumns: "104px minmax(0, 1fr)",
+                          alignItems: "stretch"
+                        }
+                      : undefined
+                  }
                   onClick={() => {
                     if (!readOnly) onToggleKept(group, key)
                     else onOpenViewer(group, itemIndex)
@@ -492,8 +517,21 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
                           : item.thumb + "=h200"
                     }
                     alt={item.fileName || item.mediaKey}
+                    height={compact ? 116 : 132}
                   />
-                  <CardContent sx={sxCardContent}>
+                  <CardContent
+                    sx={[
+                      sxCardContent,
+                      compact
+                        ? {
+                            minWidth: 0,
+                            p: 0.9,
+                            "&:last-child": { pb: 0.9 },
+                            gap: 0.25,
+                            justifyContent: "center"
+                          }
+                        : undefined
+                    ]}>
                     {item.fileName && (
                       <Typography
                         variant="caption"
